@@ -36,7 +36,7 @@
 #include <QtCore/QObject>
 #if defined(BROWSER_QTEXTBROWSER)
 #  include <QtWidgets/QTextBrowser>
-#elif defined(BROWSER_QTWEBKIT)
+#elif defined(BROWSER_QTWEBKIT) || defined(BROWSER_QTWEBENGINE)
 #  include <QtGui/QGuiApplication>
 #  include <QtGui/QScreen>
 #endif // BROWSER_QTWEBKIT
@@ -52,7 +52,7 @@ public:
     HelpViewerPrivate(int zoom)
         : zoomCount(zoom)
     { }
-#elif defined(BROWSER_QTWEBKIT)
+#elif defined(BROWSER_QTWEBKIT) || defined(BROWSER_QTWEBENGINE)
     HelpViewerPrivate()
         : m_loadFinished(false)
     {
@@ -112,7 +112,7 @@ private:
         lastAnchor.clear();
     }
 
-#elif defined(BROWSER_QTWEBKIT)
+#elif defined(BROWSER_QTWEBKIT) || defined(BROWSER_QTWEBENGINE)
     qreal webDpiRatio;
 #endif // BROWSER_QTWEBKIT
 

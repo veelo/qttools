@@ -30,6 +30,7 @@
 #include "helpenginewrapper.h"
 #include "../shared/collectionconfiguration.h"
 #include "../help/qhelpengine_p.h"
+#include "helpbrowsersupport.h"
 
 #include <QtCore/QDateTime>
 #include <QtCore/QFileInfo>
@@ -43,6 +44,10 @@
 #include <QtHelp/QHelpIndexModel>
 #include <QtHelp/QHelpLink>
 #include <QtHelp/QHelpSearchEngine>
+
+#if defined(BROWSER_QTWEBENGINE)
+#include <QtWebEngineWidgets/QWebEngineProfile>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -103,6 +108,9 @@ private:
     QFileSystemWatcher * const m_qchWatcher;
     typedef QPair<QDateTime, QSharedPointer<TimeoutForwarder> > RecentSignal;
     QMap<QString, RecentSignal> m_recentQchUpdates;
+#if defined(BROWSER_QTWEBENGINE)
+    QWebEngineUrlSchemeHandler *m_helpSchemeHandler;
+#endif
 };
 
 HelpEngineWrapper *HelpEngineWrapper::helpEngineWrapper = nullptr;
@@ -154,6 +162,10 @@ HelpEngineWrapper::HelpEngineWrapper(const QString &collectionFile)
 HelpEngineWrapper::~HelpEngineWrapper()
 {
     TRACE_OBJ
+#if defined(BROWSER_QTWEBENGINE)
+    QWebEngineProfile::defaultProfile()->removeUrlSchemeHandler(d->m_helpSchemeHandler);
+#endif
+
     const QStringList &namespaces = d->m_helpEngine->registeredDocumentations();
     for (const QString &nameSpace : namespaces) {
         const QString &docFile
@@ -694,8 +706,11 @@ void TimeoutForwarder::forward()
 // -- HelpEngineWrapperPrivate
 
 HelpEngineWrapperPrivate::HelpEngineWrapperPrivate(const QString &collectionFile)
-    : m_helpEngine(new QHelpEngine(collectionFile, this)),
-      m_qchWatcher(new QFileSystemWatcher(this))
+    : m_helpEngine(new QHelpEngine(collectionFile, this))
+    , m_qchWatcher(new QFileSystemWatcher(this))
+#if defined(BROWSER_QTWEBENGINE)
+    , m_helpSchemeHandler(0)
+#endif
 {
     TRACE_OBJ
     m_helpEngine->setReadOnly(false);
@@ -798,6 +813,17 @@ void HelpEngineWrapperPrivate::qchFileChanged(const QString &fileName,
     }
     m_recentQchUpdates.erase(it);
 }
+
+#if defined(BROWSER_QTWEBENGINE)
+
+void HelpEngineWrapper::ensureUrlSchemeHandler()
+{
+    if (!d->m_helpSchemeHandler) {
+        d->m_helpSchemeHandler = HelpBrowserSupport::createUrlSchemeHandler(this);
+        QWebEngineProfile::defaultProfile()->installUrlSchemeHandler(QByteArrayLiteral("qthelp"), d->m_helpSchemeHandler);
+    }
+}
+#endif
 
 QT_END_NAMESPACE
 
