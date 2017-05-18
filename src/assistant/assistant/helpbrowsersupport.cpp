@@ -42,6 +42,11 @@
 #include <QtCore/QUrl>
 #include <QtCore/QDebug>
 
+#ifdef BROWSER_QTWEBENGINE
+#include <QtWebEngineCore/QWebEngineUrlRequestJob>
+#include <QtWebEngineCore/QWebEngineUrlSchemeHandler>
+#endif
+
 QT_BEGIN_NAMESPACE
 
 // -- messages
@@ -159,6 +164,57 @@ protected:
     qint64 readData(char*, qint64) override { TRACE_OBJ return qint64(-1); }
 };
 
+// -- HelpDeviceReply
+
+#if defined(BROWSER_QTWEBENGINE)
+class HelpDeviceReply : public QIODevice
+{
+public:
+    HelpDeviceReply(const QUrl &request, const QByteArray &fileData);
+
+    qint64 bytesAvailable() const override
+        { return data.length() + QIODevice::bytesAvailable(); }
+
+    void close() override
+        { QIODevice::close(); deleteLater(); }
+
+protected:
+    qint64 readData(char *data, qint64 maxlen) override;
+    qint64 writeData(const char *data, qint64 maxlen) override;
+
+private:
+    QByteArray data;
+    const qint64 origLen;
+};
+
+HelpDeviceReply::HelpDeviceReply(const QUrl &/*request*/, const QByteArray &fileData)
+    : data(fileData), origLen(fileData.length())
+{
+    TRACE_OBJ
+    setOpenMode(QIODevice::ReadOnly);
+
+    QTimer::singleShot(0, this, &QIODevice::readyRead);
+    QTimer::singleShot(0, this, &QIODevice::readChannelFinished);
+}
+
+qint64 HelpDeviceReply::readData(char *buffer, qint64 maxlen)
+{
+    TRACE_OBJ
+    qint64 len = qMin(qint64(data.length()), maxlen);
+    if (len) {
+        memcpy(buffer, data.constData(), len);
+        data.remove(0, len);
+    }
+    return len;
+}
+
+qint64 HelpDeviceReply::writeData(const char */*buffer*/, qint64 /*maxlen*/)
+{
+    TRACE_OBJ
+    return 0;
+}
+#endif
+
 // -- HelpNetworkAccessManager
 
 class HelpNetworkAccessManager : public QNetworkAccessManager
@@ -228,5 +284,53 @@ QNetworkAccessManager *HelpBrowserSupport::createNetworkAccessManager(QObject *p
 {
     return new HelpNetworkAccessManager(parent);
 }
+
+#if defined(BROWSER_QTWEBENGINE)
+// -- HelpUrlSchemeHandler
+
+class HelpUrlSchemeHandler : public QWebEngineUrlSchemeHandler
+{
+public:
+    HelpUrlSchemeHandler(QObject *parent);
+
+    void requestStarted(QWebEngineUrlRequestJob *job) override;
+};
+
+HelpUrlSchemeHandler::HelpUrlSchemeHandler(QObject *parent)
+    : QWebEngineUrlSchemeHandler(parent)
+{
+    TRACE_OBJ
+}
+
+void HelpUrlSchemeHandler::requestStarted(QWebEngineUrlRequestJob *job)
+{
+    TRACE_OBJ
+
+    QByteArray data;
+    const QUrl url = job->requestUrl();
+    QUrl redirectedUrl;
+    switch (HelpBrowserSupport::resolveUrl(url, &redirectedUrl, &data)) {
+    case HelpBrowserSupport::UrlRedirect:
+        job->redirect(redirectedUrl);
+        return;
+    case HelpBrowserSupport::UrlLocalData: {
+        const QString mimeType = HelpViewer::mimeFromUrl(url);
+        QIODevice *reply = new HelpDeviceReply(url, data);
+        job->reply(mimeType.toLatin1(), reply);
+        return;
+    }
+    case HelpBrowserSupport::UrlResolveError:
+        job->fail(QWebEngineUrlRequestJob::UrlInvalid);
+        return;
+    }
+    Q_UNREACHABLE();
+}
+
+QWebEngineUrlSchemeHandler *HelpBrowserSupport::createUrlSchemeHandler(QObject *parent)
+{
+    return new HelpUrlSchemeHandler(parent);
+}
+#endif
+
 
 QT_END_NAMESPACE

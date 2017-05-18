@@ -1,5 +1,7 @@
 qtHaveModule(webkitwidgets):!contains(QT_CONFIG, static) {
     BROWSER = qtwebkit
+} else:qtHaveModule(webenginewidgets):!contains(QT_CONFIG, static) {
+    BROWSER = qtwebengine
 } else {
     BROWSER = qtextbrowser
 }
@@ -81,6 +83,10 @@ equals(BROWSER, "qtwebkit") {
     DEFINES += BROWSER_QTWEBKIT
     QT += webkitwidgets
     SOURCES += helpviewer_qwv.cpp
+} else: equals(BROWSER, "qtwebengine") {
+    DEFINES += BROWSER_QTWEBENGINE
+    QT += webenginewidgets
+    SOURCES += helpviewer_qwev.cpp
 } else {
     DEFINES += BROWSER_QTEXTBROWSER
     SOURCES += helpviewer_qtb.cpp

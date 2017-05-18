@@ -39,6 +39,8 @@
 
 #if defined(BROWSER_QTWEBKIT)
 #  include <QWebView>
+#elif defined(BROWSER_QTWEBENGINE)
+#  include <QtWebEngineWidgets/QWebEngineView>
 #elif defined(BROWSER_QTEXTBROWSER)
 #  include <QtWidgets/QTextBrowser>
 #endif
@@ -46,10 +48,14 @@
 QT_BEGIN_NAMESPACE
 
 class HelpEngineWrapper;
+class QPrinter;
 
 #if defined(BROWSER_QTWEBKIT)
 #define TEXTBROWSER_OVERRIDE
 class HelpViewer : public QWebView
+#elif defined(BROWSER_QTWEBENGINE)
+#define TEXTBROWSER_OVERRIDE
+class HelpViewer : public QWebEngineView
 #elif defined(BROWSER_QTEXTBROWSER)
 #define TEXTBROWSER_OVERRIDE override
 class HelpViewer : public QTextBrowser
@@ -99,6 +105,10 @@ public:
     static bool canOpenPage(const QString &url);
     static QString mimeFromUrl(const QUrl &url);
     static bool launchWithExternalApp(const QUrl &url);
+
+#if defined(BROWSER_QTWEBENGINE)
+    void print(QPrinter *);
+#endif
 
 public slots:
 #ifndef QT_NO_CLIPBOARD

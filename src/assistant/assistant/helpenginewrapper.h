@@ -175,6 +175,10 @@ public:
     const QByteArray topicChooserGeometry() const;
     void setTopicChooserGeometry(const QByteArray &geometry);
 
+#if defined(BROWSER_QTWEBENGINE)
+    void ensureUrlSchemeHandler();
+#endif
+
 signals:
 
     // For asynchronous doc updates triggered by external actions.
