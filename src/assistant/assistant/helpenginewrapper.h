@@ -179,6 +179,10 @@ public:
 
     QHelpEngineCore *helpEngine() const;
 
+#if defined(BROWSER_QTWEBENGINE)
+    void ensureUrlSchemeHandler();
+#endif
+
 signals:
 
     // For asynchronous doc updates triggered by external actions.
