@@ -57,7 +57,7 @@ public:
     Q_SLOT void updateActions();
     Q_SLOT void setCopyAvailable(bool available);
 
-#if defined(BROWSER_QTWEBKIT)
+#if defined(BROWSER_QTWEBKIT) || defined(BROWSER_QTWEBENGINE)
 private slots:
     void slotAboutToShowBackMenu();
     void slotAboutToShowNextMenu();
