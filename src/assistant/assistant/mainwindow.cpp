@@ -904,6 +904,8 @@ void MainWindow::showAboutDialog()
         QByteArray resources;
 #if defined(BROWSER_QTWEBKIT)
         const QString browser = QStringLiteral("Qt WebKit");
+#elif defined(BROWSER_QTWEBENGINE)
+        const QString browser = QStringLiteral("Qt WebEngine");
 #else
         const QString browser = QStringLiteral("QTextBrowser");
 #endif
