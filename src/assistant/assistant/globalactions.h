@@ -63,7 +63,7 @@ public slots:
 #endif
     void updateActions();
 
-#if defined(BROWSER_QTWEBKIT)
+#if defined(BROWSER_QTWEBKIT) || defined(BROWSER_QTWEBENGINE)
 private slots:
     void slotAboutToShowBackMenu();
     void slotAboutToShowNextMenu();

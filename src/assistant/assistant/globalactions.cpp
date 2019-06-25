@@ -38,6 +38,12 @@
 
 #if defined(BROWSER_QTWEBKIT)
 #  include <QWebHistory>
+#  define WEBHISTORY QWebHistory
+#  define WEBHISTORYITEM QWebHistoryItem
+#elif defined(BROWSER_QTWEBENGINE)
+#  include <QWebEngineHistory>
+#  define WEBHISTORY QWebEngineHistory
+#  define WEBHISTORYITEM QWebEngineHistoryItem
 #endif
 
 GlobalActions *GlobalActions::instance(QObject *parent)
@@ -164,15 +170,15 @@ void GlobalActions::setCopyAvailable(bool available)
 }
 #endif
 
-#if defined(BROWSER_QTWEBKIT)
+#if defined(BROWSER_QTWEBKIT) || defined(BROWSER_QTWEBENGINE)
 
 void GlobalActions::slotAboutToShowBackMenu()
 {
     TRACE_OBJ
     m_backMenu->clear();
-    if (QWebHistory *history = CentralWidget::instance()->currentHelpViewer()->history()) {
+    if (WEBHISTORY *history = CentralWidget::instance()->currentHelpViewer()->history()) {
         const int currentItemIndex = history->currentItemIndex();
-        QList<QWebHistoryItem> items = history->backItems(history->count());
+        QList<WEBHISTORYITEM> items = history->backItems(history->count());
         for (int i = items.count() - 1; i >= 0; --i) {
             QAction *action = new QAction(this);
             action->setText(items.at(i).title());
@@ -186,9 +192,9 @@ void GlobalActions::slotAboutToShowNextMenu()
 {
     TRACE_OBJ
     m_nextMenu->clear();
-    if (QWebHistory *history = CentralWidget::instance()->currentHelpViewer()->history()) {
+    if (WEBHISTORY *history = CentralWidget::instance()->currentHelpViewer()->history()) {
         const int count = history->count();
-        QList<QWebHistoryItem> items = history->forwardItems(count);
+        QList<WEBHISTORYITEM> items = history->forwardItems(count);
         for (int i = 0; i < items.count(); ++i) {
             QAction *action = new QAction(this);
             action->setData(count - i);
@@ -203,7 +209,7 @@ void GlobalActions::slotOpenActionUrl(QAction *action)
     TRACE_OBJ
     if (HelpViewer* viewer = CentralWidget::instance()->currentHelpViewer()) {
         const int offset = action->data().toInt();
-        QWebHistory *history = viewer->history();
+        WEBHISTORY *history = viewer->history();
         if (offset > 0) {
             history->goToItem(history->forwardItems(history->count()
                 - offset + 1).back());  // forward
@@ -213,12 +219,12 @@ void GlobalActions::slotOpenActionUrl(QAction *action)
     }
 }
 
-#endif //  BROWSER_QTWEBKIT
+#endif //  BROWSER_QTWEBKIT || BROWSER_QTWEBENGINE
 
 void GlobalActions::setupNavigationMenus(QAction *back, QAction *next,
     QWidget *parent)
 {
-#if defined(BROWSER_QTWEBKIT)
+#if defined(BROWSER_QTWEBKIT) || defined(BROWSER_QTWEBENGINE)
     m_backMenu = new QMenu(parent);
     connect(m_backMenu, &QMenu::aboutToShow,
             this, &GlobalActions::slotAboutToShowBackMenu);
