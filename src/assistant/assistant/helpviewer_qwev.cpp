@@ -56,6 +56,7 @@ class HelpPage : public QWebEnginePage
 {
 public:
     HelpPage(QObject *parent);
+    void upcomingLoad(const QUrl &url);
 
 protected:
     QWebEnginePage *createWindow(QWebEnginePage::WebWindowType) override;
@@ -137,6 +138,11 @@ bool HelpPage::acceptNavigationRequest(const QUrl &url, NavigationType type, boo
     // afterwards, but the page might not have finished loading and the old url
     // would be returned.
     return true;
+}
+
+void HelpPage::upcomingLoad(const QUrl &url)
+{
+    m_loadingUrl = url;
 }
 
 // -- HelpViewer
@@ -246,7 +252,18 @@ QUrl HelpViewer::source() const
 void HelpViewer::setSource(const QUrl &url)
 {
     TRACE_OBJ
-    load(url.toString() == QLatin1String("help") ? LocalHelpFile : url);
+    if (url.toString() == QLatin1String("help"))
+        load(LocalHelpFile);
+    else {
+        // because of async page loading, we will hit some kind
+        // of race condition while using a remote command, like a combination of
+        // SetSource; SyncContent. SetSource would be called and SyncContents shortly
+        // afterwards, but the page might not have finished loading and the old url
+        // would be returned.
+        d->m_loadFinished = false;
+        static_cast<HelpPage*>(page())->upcomingLoad(url);
+        load(url);
+    }
 }
 
 QString HelpViewer::selectedText() const
