@@ -145,6 +145,9 @@ private slots:
     void actionChanged();
     void setLoadStarted();
     void setLoadFinished(bool ok);
+#if defined(BROWSER_QTWEBENGINE)
+    void onSelectionChanged(); // Work around QTBUG-76666
+#endif
 
 private:
     bool eventFilter(QObject *obj, QEvent *event) override;

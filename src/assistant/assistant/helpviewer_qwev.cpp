@@ -178,6 +178,7 @@ HelpViewer::HelpViewer(qreal zoom, QWidget *parent)
     connect(this, SIGNAL(loadStarted()), this, SLOT(setLoadStarted()));
     connect(this, SIGNAL(loadFinished(bool)), this, SLOT(setLoadFinished(bool)));
     connect(this, SIGNAL(titleChanged(QString)), this, SIGNAL(titleChanged()));
+    connect(this, SIGNAL(selectionChanged()), this, SLOT(onSelectionChanged())); // Work around QTBUG-76666
 
     setFont(viewerFont());
     setZoomFactor(d->webDpiRatio * (zoom == 0.0 ? 1.0 : zoom));
@@ -397,6 +398,12 @@ void HelpViewer::actionChanged()
         emit backwardAvailable(a->isEnabled());
     else if (a == pageAction(QWebEnginePage::Forward))
         emit forwardAvailable(a->isEnabled());
+}
+
+// Work around QTBUG-76666
+void HelpViewer::onSelectionChanged()
+{
+    pageAction(QWebEnginePage::Copy)->setEnabled(hasSelection());
 }
 
 // -- private
