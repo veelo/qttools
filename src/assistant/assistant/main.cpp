@@ -49,6 +49,10 @@
 #include <QWebSettings>
 #endif
 
+#if defined(BROWSER_QTWEBENGINE)
+#include <QWebEngineUrlScheme>
+#endif
+
 #include "../shared/collectionconfiguration.h"
 #include "helpenginewrapper.h"
 #include "mainwindow.h"
@@ -375,6 +379,13 @@ int main(int argc, char *argv[])
         QWebSettings::globalSettings()->setFontFamily(QWebSettings::StandardFont, f.defaultFamily());
     }
 #endif // BROWSER_QTWEBKIT
+
+#if defined(BROWSER_QTWEBENGINE)
+    QWebEngineUrlScheme scheme(QByteArrayLiteral("qthelp"));
+    scheme.setSyntax(QWebEngineUrlScheme::Syntax::Path);
+    scheme.setFlags(QWebEngineUrlScheme::SecureScheme);
+    QWebEngineUrlScheme::registerScheme(scheme);
+#endif // BROWSER_QTWEBENGINE
 
     // Parse arguments.
     CmdLineParser cmd(a->arguments());
