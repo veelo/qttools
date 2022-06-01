@@ -88,7 +88,7 @@ public:
     void setTitle(const QString &title);
 
     QUrl source() const;
-#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0) || BROWSER_QTWEBENGINE
     void setSource(const QUrl &url) TEXTBROWSER_OVERRIDE;
 #else
     void doSetSource(const QUrl &url, QTextDocument::ResourceType type) TEXTBROWSER_OVERRIDE;
@@ -109,10 +109,6 @@ public:
     static bool canOpenPage(const QString &url);
     static QString mimeFromUrl(const QUrl &url);
     static bool launchWithExternalApp(const QUrl &url);
-
-#if defined(BROWSER_QTWEBENGINE)
-    void print(QPrinter *);
-#endif
 
 public slots:
 #if QT_CONFIG(clipboard)

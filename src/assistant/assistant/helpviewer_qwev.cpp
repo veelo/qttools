@@ -43,8 +43,9 @@
 #include <QtWidgets/QApplication>
 #include <QtGui/QWheelEvent>
 
-#include <QtWebEngineWidgets/QWebEnginePage>
-#include <QtWebEngineWidgets/QWebEngineSettings>
+#include <QtWebEngineCore/QWebEnginePage>
+#include <QtWebEngineCore/QWebEngineSettings>
+#include <QtWebEngineCore/QWebEngineProfile>
 
 #include <QtNetwork/QNetworkReply>
 
@@ -124,7 +125,7 @@ bool HelpPage::acceptNavigationRequest(const QUrl &url, NavigationType type, boo
     }
 
     if (type == QWebEnginePage::NavigationTypeLinkClicked &&
-            (m_keyboardModifiers & Qt::ControlModifier || m_pressedButtons == Qt::MidButton)) {
+            (m_keyboardModifiers & Qt::ControlModifier || m_pressedButtons == Qt::MiddleButton)) {
         m_pressedButtons = Qt::NoButton;
         m_keyboardModifiers = Qt::NoModifier;
         OpenPagesManager::instance()->createPage(url);
@@ -183,7 +184,7 @@ QFont HelpViewer::viewerFont() const
     if (HelpEngineWrapper::instance().usesBrowserFont())
         return HelpEngineWrapper::instance().browserFont();
 
-    QWebEngineSettings *webSettings = QWebEngineSettings::globalSettings();
+    QWebEngineSettings *webSettings = QWebEngineProfile::defaultProfile()->settings();
     return QFont(webSettings->fontFamily(QWebEngineSettings::StandardFont),
         webSettings->fontSize(QWebEngineSettings::DefaultFontSize));
 }
@@ -271,7 +272,7 @@ bool HelpViewer::findText(const QString &text, FindFlags flags, bool incremental
 {
     Q_UNUSED(incremental)
     Q_UNUSED(fromSearch)
-    QWebEnginePage::FindFlags webEngineFlags = 0;
+    QWebEnginePage::FindFlags webEngineFlags(0);
     if (flags & FindBackward)
         webEngineFlags |= QWebEnginePage::FindBackward;
     if (flags & FindCaseSensitively)
@@ -281,11 +282,6 @@ bool HelpViewer::findText(const QString &text, FindFlags flags, bool incremental
     // So we just claim that the search succeeded
     QWebEngineView::findText(text, webEngineFlags);
     return true;
-}
-
-void HelpViewer::print(QPrinter *printer)
-{
-    page()->print(printer, [](bool) { /* don't care */ });
 }
 
 // -- public slots
@@ -330,7 +326,7 @@ void HelpViewer::wheelEvent(QWheelEvent *event)
     TRACE_OBJ
     if (event->modifiers() & Qt::ControlModifier) {
         event->accept();
-        event->delta() > 0 ? scaleUp() : scaleDown();
+        event->angleDelta().y() > 0 ? scaleUp() : scaleDown();
     } else {
         QWebEngineView::wheelEvent(event);
     }
@@ -366,6 +362,13 @@ void HelpViewer::mouseReleaseEvent(QMouseEvent *event)
     }
 
     QWebEngineView::mouseReleaseEvent(event);
+}
+
+void HelpViewer::resizeEvent(QResizeEvent *e)
+{
+    //const int topTextPosition = cursorForPosition({width() / 2, 0}).position();
+    QWebEngineView::resizeEvent(e);
+    //scrollToTextPosition(topTextPosition);
 }
 
 // -- private slots

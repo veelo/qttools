@@ -46,7 +46,7 @@
 #include <QtHelp/QHelpSearchEngine>
 
 #if defined(BROWSER_QTWEBENGINE)
-#include <QtWebEngineWidgets/QWebEngineProfile>
+#include <QtWebEngineCore/QWebEngineProfile>
 #endif
 
 QT_BEGIN_NAMESPACE

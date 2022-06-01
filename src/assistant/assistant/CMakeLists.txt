@@ -119,7 +119,15 @@ set_target_properties(assistant PROPERTIES
 #### Keys ignored in scope 2:.:.:assistant.pro:TARGET Qt::WebKitWidgets AND NOT QT_CONFIG___contains___static:
 # BROWSER = "qtwebkit"
 
-#### Keys ignored in scope 3:.:.:assistant.pro:else:
+#### Keys ignored in scope 3:.:.:assistant.pro:TARGET Qt::WebEngineWidgets AND NOT QT_CONFIG___contains___static:
+# BROWSER = "qtwebengine"
+find_package(Qt6 ${PROJECT_VERSION} QUIET CONFIG OPTIONAL_COMPONENTS WebEngineWidgets)
+
+IF( ${QT_CMAKE_EXPORT_NAMESPACE}WebEngineWidgets_FOUND )
+  set(BROWSER "qtwebengine")
+ENDIF()
+
+## Keys ignored in scope 4:.:.:assistant.pro:else:
 # BROWSER = "qtextbrowser"
 
 qt_internal_extend_target(assistant CONDITION TARGET Qt::PrintSupport
@@ -127,7 +135,7 @@ qt_internal_extend_target(assistant CONDITION TARGET Qt::PrintSupport
         Qt::PrintSupport
 )
 
-qt_internal_extend_target(assistant CONDITION BROWSER___equals___qtwebkit
+qt_internal_extend_target(assistant CONDITION BROWSER STREQUAL qtwebkit
     SOURCES
         helpviewer_qwv.cpp
     DEFINES
@@ -136,7 +144,16 @@ qt_internal_extend_target(assistant CONDITION BROWSER___equals___qtwebkit
         Qt::WebKitWidgets
 )
 
-qt_internal_extend_target(assistant CONDITION NOT BROWSER___equals___qtwebkit
+qt_internal_extend_target(assistant CONDITION BROWSER STREQUAL qtwebengine AND NOT BROWSER STREQUAL qtwebkit
+    SOURCES
+        helpviewer_qwev.cpp
+    DEFINES
+        BROWSER_QTWEBENGINE
+    PUBLIC_LIBRARIES
+        Qt::WebEngineWidgets
+)
+
+qt_internal_extend_target(assistant CONDITION NOT BROWSER STREQUAL qtwebkit AND NOT BROWSER STREQUAL qtwebengine
     SOURCES
         helpviewer_qtb.cpp
     DEFINES
