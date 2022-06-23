@@ -18,3 +18,23 @@ Working directory: | %{buildDir}\bin
 
 This will copy the necessary shared libraries so that Assistant will run from the <code>bin</code> subdirectory inside the build directory.
 </ol>
+
+## Compilation using cmake
+<ol>
+<li> Switch to the <code>6.1.3_compile_against_6.2.4_assistant_webengine</code> branch.
+<li> Ensure you have appropriate cmake version (3.15+).
+<li> Ensure you have the correct version of Qt configured, or pass in on cmake command line.
+<li> Set up to use appropriate compiler (e.g. scl enable, or vcvars64.bat).
+<li> Create build directory and change to it. (E.g. as a subdirectory of qttools)
+<li> For Windows: 
+<ol>
+  <li> Run cmake: cmake .. -DCMAKE_PREFIX_PATH=p:\qt\qt-opensource-6.2.4\win64_vc142 -DCMAKE_GENERATOR=Ninja -DCMAKE_BUILD_TYPE=Release
+  <li> ninja.exe assistant
+</ol>
+<li> For Linux: 
+<ol>
+  <li> Run cmake: cmake ..
+  <li> make assistant
+</ol>
+
+</ol>
