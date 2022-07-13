@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2019 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -33,24 +33,20 @@
 #ifndef OPENEDLIST_H
 #define OPENEDLIST_H
 
-#include <qstring.h>
-
 #include "location.h"
+
+#include <QtCore/qstring.h>
 
 QT_BEGIN_NAMESPACE
 
 class OpenedList
 {
-    Q_DECLARE_TR_FUNCTIONS(QDoc::OpenedList)
-
 public:
-    enum ListStyle { Bullet, Tag, Value, Numeric, UpperAlpha, LowerAlpha,
-                     UpperRoman, LowerRoman };
+    enum ListStyle { Bullet, Tag, Value, Numeric, UpperAlpha, LowerAlpha, UpperRoman, LowerRoman };
 
-    OpenedList()
-        : sty( Bullet ), ini( 1 ), nex( 0 ) { }
-    OpenedList( ListStyle style );
-    OpenedList( const Location& location, const QString& hint );
+    OpenedList() : sty(Bullet), ini(1), nex(0) {}
+    OpenedList(ListStyle style);
+    OpenedList(const Location &location, const QString &hint);
 
     void next() { nex++; }
 
@@ -63,10 +59,10 @@ public:
     QString suffix() const { return suff; }
 
 private:
-    static QString toAlpha( int n );
-    static int fromAlpha( const QString& str );
-    static QString toRoman( int n );
-    static int fromRoman( const QString& str );
+    static QString toAlpha(int n);
+    static int fromAlpha(const QString &str);
+    static QString toRoman(int n);
+    static int fromRoman(const QString &str);
 
     ListStyle sty;
     int ini;
@@ -74,7 +70,7 @@ private:
     QString pref;
     QString suff;
 };
-Q_DECLARE_TYPEINFO(OpenedList, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(OpenedList, Q_RELOCATABLE_TYPE);
 
 QT_END_NAMESPACE
 

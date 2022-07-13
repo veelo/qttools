@@ -1,4 +1,5 @@
 include($QT_INSTALL_DOCS/global/qt-module-defaults.qdocconf)
+include($QT_INSTALL_DOCS/config/exampleurl-qttools.qdocconf)
 
 project                 = QtDesigner
 description             = Qt Designer Manual
@@ -42,7 +43,9 @@ exampledirs             = ../../../../../examples/designer \
 
 imagedirs               = images
 
-depends                 += qtdoc qtwidgets qtcore qtuitools qtquick qmake
+depends                 += qtdoc qtgui qtwidgets qtcore qtuitools qtquick qmake
 
 navigation.landingpage = "Qt Designer Manual"
 navigation.cppclassespage = "Qt Designer C++ Classes"
+
+warninglimit = 0

@@ -43,23 +43,34 @@
 QT_BEGIN_NAMESPACE
 
 enum PlatformFlag {
-    WindowsBased = 0x1000,
-    UnixBased = 0x2000,
-    IntelBased = 0x4000,
-    ArmBased = 0x8000,
-    MinGW = 0x10000
-};
-
-enum Platform {
-    WindowsDesktop = WindowsBased + IntelBased,
+    // OS
+    WindowsBased = 0x00001,
+    UnixBased    = 0x00002,
+    // CPU
+    IntelBased   = 0x00010,
+    ArmBased     = 0x00020,
+    // Compiler
+    Msvc         = 0x00100,
+    MinGW        = 0x00200,
+    ClangMsvc    = 0x00400,
+    ClangMinGW   = 0x00800,
+    // Platforms
+    WindowsDesktopMsvc = WindowsBased + IntelBased + Msvc,
     WindowsDesktopMinGW = WindowsBased + IntelBased + MinGW,
-    WinRtIntel = WindowsBased + IntelBased + 1,
-    WinRtArm = WindowsBased + ArmBased + 2,
-    WinCEIntel = WindowsBased + IntelBased + 5,
-    WinCEArm = WindowsBased + ArmBased + 6,
+    WindowsDesktopClangMsvc = WindowsBased + IntelBased + ClangMsvc,
+    WindowsDesktopClangMinGW = WindowsBased + IntelBased + ClangMinGW,
     Unix = UnixBased,
     UnknownPlatform
 };
+
+Q_DECLARE_FLAGS(Platform, PlatformFlag)
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(Platform)
+
+inline bool platformHasDebugSuffix(Platform p) // Uses 'd' debug suffix
+{
+    return p.testFlag(Msvc) || p.testFlag(ClangMsvc);
+}
 
 enum ListOption {
     ListNone = 0,
@@ -162,7 +173,7 @@ QString findInPath(const QString &file);
 
 extern const char *qmakeInfixKey; // Fake key containing the libinfix
 
-QMap<QString, QString> queryQMakeAll(QString *errorMessage);
+QMap<QString, QString> queryQMakeAll(const QString &qmakeBinary, QString *errorMessage);
 QString queryQMake(const QString &variable, QString *errorMessage);
 
 enum DebugMatchMode {
@@ -181,7 +192,6 @@ bool runProcess(const QString &binary, const QStringList &args,
                 const QString &workingDirectory = QString(),
                 unsigned long *exitCode = 0, QByteArray *stdOut = 0, QByteArray *stdErr = 0,
                 QString *errorMessage = 0);
-bool runElevatedBackgroundProcess(const QString &binary, const QStringList &args, Qt::HANDLE *processHandle);
 
 bool readPeExecutable(const QString &peExecutableFileName, QString *errorMessage,
                       QStringList *dependentLibraries = 0, unsigned *wordSize = 0,

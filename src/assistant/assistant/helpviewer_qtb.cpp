@@ -38,7 +38,8 @@
 
 #include <QtGui/QContextMenuEvent>
 #include <QtWidgets/QMenu>
-#ifndef QT_NO_CLIPBOARD
+#include <QtWidgets/QScrollBar>
+#if QT_CONFIG(clipboard)
 #include <QtGui/QClipboard>
 #endif
 #include <QtWidgets/QApplication>
@@ -143,9 +144,16 @@ QUrl HelpViewer::source() const
     return QTextBrowser::source();
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 void HelpViewer::setSource(const QUrl &url)
+#else
+void HelpViewer::doSetSource(const QUrl &url, QTextDocument::ResourceType type)
+#endif
 {
     TRACE_OBJ
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+    Q_UNUSED(type);
+#endif
     if (launchWithExternalApp(url))
         return;
 
@@ -153,7 +161,7 @@ void HelpViewer::setSource(const QUrl &url)
     bool helpOrAbout = (url.toString() == QLatin1String("help"));
     const QUrl resolvedUrl = (helpOrAbout ? LocalHelpFile : HelpEngineWrapper::instance().findFile(url));
 
-    QTextBrowser::setSource(resolvedUrl);
+    QTextBrowser::doSetSource(resolvedUrl, type);
 
     if (!resolvedUrl.isValid()) {
         helpOrAbout = (url.toString() == QLatin1String("about:blank"));
@@ -237,7 +245,7 @@ bool HelpViewer::findText(const QString &text, FindFlags flags, bool incremental
 
 // -- public slots
 
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
 void HelpViewer::copy()
 {
     TRACE_OBJ
@@ -277,7 +285,7 @@ void HelpViewer::wheelEvent(QWheelEvent *e)
     TRACE_OBJ
     if (e->modifiers() == Qt::ControlModifier) {
         e->accept();
-        e->delta() > 0 ? scaleUp() : scaleDown();
+        e->angleDelta().y() > 0 ? scaleUp() : scaleDown();
     } else {
         QTextBrowser::wheelEvent(e);
     }
@@ -304,12 +312,20 @@ void HelpViewer::mouseReleaseEvent(QMouseEvent *e)
 
     bool controlPressed = e->modifiers() & Qt::ControlModifier;
     if ((controlPressed && d->hasAnchorAt(this, e->pos())) ||
-        (e->button() == Qt::MidButton && d->hasAnchorAt(this, e->pos()))) {
+        (e->button() == Qt::MiddleButton && d->hasAnchorAt(this, e->pos()))) {
         d->openLinkInNewPage();
         return;
     }
 
     QTextBrowser::mouseReleaseEvent(e);
+}
+
+
+void HelpViewer::resizeEvent(QResizeEvent *e)
+{
+    const int topTextPosition = cursorForPosition({width() / 2, 0}).position();
+    QTextBrowser::resizeEvent(e);
+    scrollToTextPosition(topTextPosition);
 }
 
 // -- private slots
@@ -336,7 +352,9 @@ void HelpViewer::contextMenuEvent(QContextMenuEvent *event)
 
     QMenu menu(QString(), nullptr);
     QUrl link;
+#if QT_CONFIG(clipboard)
     QAction *copyAnchorAction = nullptr;
+#endif
     if (d->hasAnchorAt(this, event->pos())) {
         link = anchorAt(event->pos());
         if (link.isRelative())
@@ -344,17 +362,19 @@ void HelpViewer::contextMenuEvent(QContextMenuEvent *event)
         menu.addAction(tr("Open Link"), d, &HelpViewerPrivate::openLink);
         menu.addAction(tr("Open Link in New Tab\tCtrl+LMB"), d, &HelpViewerPrivate::openLinkInNewPage);
 
+#if QT_CONFIG(clipboard)
         if (!link.isEmpty() && link.isValid())
             copyAnchorAction = menu.addAction(tr("Copy &Link Location"));
+#endif
     } else if (!selectedText().isEmpty()) {
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
         menu.addAction(tr("Copy"), this, &HelpViewer::copy);
 #endif
     } else {
         menu.addAction(tr("Reload"), this, &HelpViewer::reload);
     }
 
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
     if (copyAnchorAction == menu.exec(event->globalPos()))
         QApplication::clipboard()->setText(link.toString());
 #endif
@@ -375,6 +395,18 @@ QVariant HelpViewer::loadResource(int type, const QUrl &name)
         }
     }
     return ba;
+}
+
+
+void HelpViewer::scrollToTextPosition(int position)
+{
+    QTextCursor tc(document());
+    tc.setPosition(position);
+    const int dy = cursorRect(tc).top();
+    if (verticalScrollBar()) {
+        verticalScrollBar()->setValue(
+                    std::min(verticalScrollBar()->value() + dy, verticalScrollBar()->maximum()));
+    }
 }
 
 QT_END_NAMESPACE

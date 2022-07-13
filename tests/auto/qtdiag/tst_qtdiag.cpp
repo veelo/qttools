@@ -46,7 +46,7 @@ private:
 
 void tst_QtDiag::initTestCase()
 {
-    QString binary = QLibraryInfo::location(QLibraryInfo::BinariesPath) + QStringLiteral("/qtdiag");
+    QString binary = QLibraryInfo::path(QLibraryInfo::BinariesPath) + QStringLiteral("/qtdiag");
 #  ifdef Q_OS_WIN
     binary += QStringLiteral(".exe");
 #  endif
@@ -67,7 +67,7 @@ void tst_QtDiag::run()
         QSKIP("Binary could not be found");
     QProcess process;
     qDebug() << "Launching " << QDir::toNativeSeparators(m_binary);
-    process.start(m_binary);
+    process.start(m_binary, QStringList{});
     QVERIFY2(process.waitForStarted(), qPrintable(process.errorString()));
     QVERIFY(process.waitForFinished());
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);

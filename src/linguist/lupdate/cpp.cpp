@@ -26,29 +26,16 @@
 **
 ****************************************************************************/
 
-#include "lupdate.h"
+#include "cpp.h"
 
 #include <translator.h>
-
 #include <QtCore/QBitArray>
-#include <QtCore/QDebug>
-#include <QtCore/QFileInfo>
-#include <QtCore/QRegExp>
 #include <QtCore/QStack>
-#include <QtCore/QString>
-#include <QtCore/QTextCodec>
 #include <QtCore/QTextStream>
-#include <QtCore/QCoreApplication>
-
-#include <iostream>
-
-#include <ctype.h>              // for isXXX()
+#include <QtCore/QRegularExpression>
 
 QT_BEGIN_NAMESPACE
 
-class LU {
-    Q_DECLARE_TR_FUNCTIONS(LUpdate)
-};
 
 /* qmake ignore Q_OBJECT */
 
@@ -58,42 +45,18 @@ static QString MagicComment(QLatin1String("TRANSLATOR"));
 
 //#define DIAGNOSE_RETRANSLATABILITY // FIXME: should make a runtime option of this
 
-class HashString {
-public:
-    HashString() : m_hash(0x80000000) {}
-    explicit HashString(const QString &str) : m_str(str), m_hash(0x80000000) {}
-    void setValue(const QString &str) { m_str = str; m_hash = 0x80000000; }
-    const QString &value() const { return m_str; }
-    bool operator==(const HashString &other) const { return m_str == other.m_str; }
-private:
-    QString m_str;
-    mutable uint m_hash; // We use the highest bit as a validity indicator (set => invalid)
-    friend uint qHash(const HashString &str);
-};
-
-uint qHash(const HashString &str)
+size_t qHash(const HashString &str)
 {
     if (str.m_hash & 0x80000000)
         str.m_hash = qHash(str.m_str) & 0x7fffffff;
     return str.m_hash;
 }
 
-class HashStringList {
-public:
-    explicit HashStringList(const QList<HashString> &list) : m_list(list), m_hash(0x80000000) {}
-    const QList<HashString> &value() const { return m_list; }
-    bool operator==(const HashStringList &other) const { return m_list == other.m_list; }
-private:
-    QList<HashString> m_list;
-    mutable uint m_hash; // We use the highest bit as a validity indicator (set => invalid)
-    friend uint qHash(const HashStringList &list);
-};
-
-uint qHash(const HashStringList &list)
+size_t qHash(const HashStringList &list)
 {
     if (list.m_hash & 0x80000000) {
         uint hash = 0;
-        foreach (const HashString &qs, list.m_list) {
+        for (const HashString &qs : list.m_list) {
             hash ^= qHash(qs) ^ 0x6ad9f526;
             hash = ((hash << 13) & 0x7fffffff) | (hash >> 18);
         }
@@ -101,42 +64,6 @@ uint qHash(const HashStringList &list)
     }
     return list.m_hash;
 }
-
-typedef QList<HashString> NamespaceList;
-
-struct Namespace {
-
-    Namespace() :
-            classDef(this),
-            hasTrFunctions(false), complained(false)
-    {}
-    ~Namespace()
-    {
-        qDeleteAll(children);
-    }
-
-    QHash<HashString, Namespace *> children;
-    QHash<HashString, NamespaceList> aliases;
-    QList<HashStringList> usings;
-
-    // Class declarations set no flags and create no namespaces, so they are ignored.
-    // Class definitions may appear multiple times - but only because we are trying to
-    // "compile" all sources irrespective of build configuration.
-    // Nested classes may be forward-declared inside a definition, and defined in another file.
-    // The latter will detach the class' child list, so clones need a backlink to the original
-    // definition (either one in case of multiple definitions).
-    // Namespaces can have tr() functions as well, so we need to track parent definitions for
-    // them as well. The complication is that we may have to deal with a forrest instead of
-    // a tree - in that case the parent will be arbitrary. However, it seem likely that
-    // Q_DECLARE_TR_FUNCTIONS would be used either in "class-like" namespaces with a central
-    // header or only locally in a file.
-    Namespace *classDef;
-
-    QString trQualification;
-
-    bool hasTrFunctions;
-    bool complained; // ... that tr functions are missing.
-};
 
 static int nextFileId;
 
@@ -155,37 +82,6 @@ public:
     }
 private:
     QBitArray m_ba;
-};
-
-struct ParseResults {
-    int fileId;
-    Namespace rootNamespace;
-    QSet<const ParseResults *> includes;
-};
-
-struct IncludeCycle {
-    QSet<QString> fileNames;
-    QSet<const ParseResults *> results;
-};
-
-typedef QHash<QString, IncludeCycle *> IncludeCycleHash;
-typedef QHash<QString, const Translator *> TranslatorHash;
-
-class CppFiles {
-
-public:
-    static QSet<const ParseResults *> getResults(const QString &cleanFile);
-    static void setResults(const QString &cleanFile, const ParseResults *results);
-    static const Translator *getTranslator(const QString &cleanFile);
-    static void setTranslator(const QString &cleanFile, const Translator *results);
-    static bool isBlacklisted(const QString &cleanFile);
-    static void setBlacklisted(const QString &cleanFile);
-    static void addIncludeCycle(const QSet<QString> &fileNames);
-
-private:
-    static IncludeCycleHash &includeCycles();
-    static TranslatorHash &translatedFiles();
-    static QSet<QString> &blacklistedFiles();
 };
 
 class CppParser {
@@ -302,6 +198,7 @@ private:
     int yyCh;
     bool yyAtNewline;
     QString yyWord;
+    qsizetype yyWordInitialCapacity = 0;
     QStack<IfdefState> yyIfdefStack;
     int yyBracketDepth;
     int yyBraceDepth;
@@ -313,7 +210,7 @@ private:
     int yyParenLineNo;
 
     // the string to read from and current position in the string
-    QTextCodec *yySourceCodec;
+    QStringConverter::Encoding yySourceEncoding = QStringConverter::Utf8;
     QString yyInStr;
     const ushort *yyInPtr;
 
@@ -376,14 +273,14 @@ void CppParser::setInput(const QString &in)
 {
     yyInStr = in;
     yyFileName = QString();
-    yySourceCodec = 0;
+    yySourceEncoding = QStringConverter::Utf8;
 }
 
 void CppParser::setInput(QTextStream &ts, const QString &fileName)
 {
     yyInStr = ts.readAll();
     yyFileName = fileName;
-    yySourceCodec = ts.codec();
+    yySourceEncoding = ts.encoding();
 }
 
 /*
@@ -491,7 +388,7 @@ CppParser::TokenType CppParser::getToken()
 {
   restart:
     // Failing this assertion would mean losing the preallocated buffer.
-    Q_ASSERT(yyWord.isDetached());
+    Q_ASSERT(yyWord.capacity() == yyWordInitialCapacity);
 
     while (yyCh != EOF) {
         yyLineNo = yyCurLineNo;
@@ -1092,7 +989,7 @@ bool CppParser::visitNamespace(const NamespaceList &namespaces, int nsCount,
     if ((this->*callback)(ns, context))
         return true;
 supers:
-    foreach (const ParseResults *sup, rslt->includes)
+    for (const ParseResults *sup : rslt->includes)
         if (vr.tryVisit(sup->fileId)
             && visitNamespace(namespaces, nsCount, callback, context, vr, sup))
             return true;
@@ -1127,7 +1024,7 @@ bool CppParser::qualifyOneCallbackOwn(const Namespace *ns, void *context) const
         *data->resolved << data->segment;
         return true;
     }
-    QHash<HashString, NamespaceList>::ConstIterator nsai = ns->aliases.constFind(data->segment);
+    auto nsai = ns->aliases.constFind(data->segment);
     if (nsai != ns->aliases.constEnd()) {
         const NamespaceList &nsl = *nsai;
         if (nsl.last().value().isEmpty()) { // Delayed alias resolution
@@ -1149,7 +1046,7 @@ bool CppParser::qualifyOneCallbackOwn(const Namespace *ns, void *context) const
 bool CppParser::qualifyOneCallbackUsing(const Namespace *ns, void *context) const
 {
     QualifyOneData *data = (QualifyOneData *)context;
-    foreach (const HashStringList &use, ns->usings)
+    for (const HashStringList &use : ns->usings)
         if (!data->visitedUsings->contains(use)) {
             data->visitedUsings->insert(use);
             if (qualifyOne(use.value(), use.value().count(), data->segment, data->resolved,
@@ -1234,7 +1131,7 @@ bool CppParser::fullyQualify(const NamespaceList &namespaces,
     static QString strColons(QLatin1String("::"));
 
     NamespaceList segments;
-    foreach (const QString &str, quali.split(strColons)) // XXX slow, but needs to be fast(?)
+    for (const QString &str : quali.split(strColons)) // XXX slow, but needs to be fast(?)
         segments << HashString(str);
     return fullyQualify(namespaces, segments, isDeclaration, resolved, unresolved);
 }
@@ -1341,7 +1238,7 @@ void CppFiles::addIncludeCycle(const QSet<QString> &fileNames)
     cycle->fileNames = fileNames;
 
     QSet<IncludeCycle *> intersectingCycles;
-    foreach (const QString &fileName, fileNames) {
+    for (const QString &fileName : fileNames) {
         IncludeCycle *intersectingCycle = includeCycles().value(fileName);
 
         if (intersectingCycle && !intersectingCycles.contains(intersectingCycle)) {
@@ -1353,7 +1250,7 @@ void CppFiles::addIncludeCycle(const QSet<QString> &fileNames)
     }
     qDeleteAll(intersectingCycles);
 
-    foreach (const QString &fileName, cycle->fileNames)
+    for (const QString &fileName : qAsConst(cycle->fileNames))
         includeCycles().insert(fileName, cycle);
 }
 
@@ -1368,9 +1265,9 @@ void CppParser::processInclude(const QString &file, ConversionData &cd, const QS
 {
     QString cleanFile = QDir::cleanPath(file);
 
-    foreach (const QString &ex, cd.m_excludes) {
-        QRegExp rx(ex, Qt::CaseSensitive, QRegExp::Wildcard);
-        if (rx.exactMatch(cleanFile))
+    for (const QString &ex : qAsConst(cd.m_excludes)) {
+        QRegularExpression rx(QRegularExpression::wildcardToRegularExpression(ex));
+        if (rx.match(cleanFile).hasMatch())
             return;
     }
 
@@ -1406,13 +1303,13 @@ void CppParser::processInclude(const QString &file, ConversionData &cd, const QS
     }
 
     QTextStream ts(&f);
-    ts.setCodec(yySourceCodec);
+    ts.setEncoding(yySourceEncoding);
     ts.setAutoDetectUnicode(true);
 
     inclusions.insert(cleanFile);
     if (isIndirect) {
         CppParser parser;
-        foreach (const QString &projectRoot, cd.m_projectRoots)
+        for (const QString &projectRoot : qAsConst(cd.m_projectRoots))
             if (cleanFile.startsWith(projectRoot)) {
                 parser.setTranslator(new Translator);
                 break;
@@ -1492,12 +1389,12 @@ bool CppParser::matchEncoding()
         if (yyTok == Tok_ColonColon)
             yyTok = getToken();
     }
-    if (yyWord == strUnicodeUTF8 || yyWord == strDefaultCodec || yyWord == strCodecForTr) {
+    if (yyWord == strUnicodeUTF8) {
         yyTok = getToken();
         return true;
     }
-    if (yyWord == strLatin1)
-        yyMsg() << qPrintable(LU::tr("Unsupported encoding Latin1\n"));
+    if (yyWord == strLatin1 || yyWord == strDefaultCodec || yyWord == strCodecForTr)
+        yyMsg() << qPrintable(LU::tr("Unsupported encoding Latin1/DefaultCodec/CodecForTr\n"));
     return false;
 }
 
@@ -1784,6 +1681,7 @@ void CppParser::parseInternal(ConversionData &cd, const QStringList &includeStac
     pendingContext.clear();
 
     yyWord.reserve(yyInStr.size()); // Rather insane. That's because we do no length checking.
+    yyWordInitialCapacity = yyWord.capacity();
     yyInPtr = (const ushort *)yyInStr.unicode();
     yyCh = getChar();
     yyTok = getToken();
@@ -1809,13 +1707,13 @@ void CppParser::parseInternal(ConversionData &cd, const QStringList &includeStac
         }
         Q_FALLTHROUGH();
         case Tok_AngledInclude: {
-            QStringList cSources = cd.m_allCSources.values(yyWord);
+            const QStringList cSources = cd.m_allCSources.values(yyWord);
             if (!cSources.isEmpty()) {
-                foreach (const QString &cSource, cSources)
+                for (const QString &cSource : cSources)
                     processInclude(cSource, cd, includeStack, inclusions);
                 goto incOk;
             }
-            foreach (const QString &incPath, cd.m_includePath) {
+            for (const QString &incPath : qAsConst(cd.m_includePath)) {
                 text = QDir(incPath).absoluteFilePath(yyWord);
                 text.detach();
                 if (QFileInfo(text).isFile()) {
@@ -2314,7 +2212,7 @@ const ParseResults *CppParser::recordResults(bool isHeader)
             && results->rootNamespace.aliases.isEmpty()
             && results->rootNamespace.usings.isEmpty()) {
             // This is a forwarding header. Slash it.
-            pr = *results->includes.begin();
+            pr = *results->includes.cbegin();
             delete results;
         } else {
             results->fileId = nextFileId++;
@@ -2330,9 +2228,9 @@ const ParseResults *CppParser::recordResults(bool isHeader)
 
 void loadCPP(Translator &translator, const QStringList &filenames, ConversionData &cd)
 {
-    QTextCodec *codec = QTextCodec::codecForName(cd.m_sourceIsUtf16 ? "UTF-16" : "UTF-8");
+    QStringConverter::Encoding e = cd.m_sourceIsUtf16 ? QStringConverter::Utf16 : QStringConverter::Utf8;
 
-    foreach (const QString &filename, filenames) {
+    for (const QString &filename : filenames) {
         if (!CppFiles::getResults(filename).isEmpty() || CppFiles::isBlacklisted(filename))
             continue;
 
@@ -2344,7 +2242,7 @@ void loadCPP(Translator &translator, const QStringList &filenames, ConversionDat
 
         CppParser parser;
         QTextStream ts(&file);
-        ts.setCodec(codec);
+        ts.setEncoding(e);
         ts.setAutoDetectUnicode(true);
         parser.setInput(ts, filename);
         Translator *tor = new Translator;
@@ -2354,10 +2252,10 @@ void loadCPP(Translator &translator, const QStringList &filenames, ConversionDat
         parser.recordResults(isHeader(filename));
     }
 
-    foreach (const QString &filename, filenames) {
+    for (const QString &filename : filenames) {
         if (!CppFiles::isBlacklisted(filename)) {
             if (const Translator *tor = CppFiles::getTranslator(filename)) {
-                foreach (const TranslatorMessage &msg, tor->messages())
+                for (const TranslatorMessage &msg : tor->messages())
                     translator.extend(msg, cd);
             }
         }

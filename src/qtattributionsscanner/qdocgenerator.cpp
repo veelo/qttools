@@ -70,7 +70,6 @@ static void generate(QTextStream &out, const Package &package, const QDir &baseD
                      LogLevel logLevel)
 {
     out << "/*!\n\n";
-    out << "\\contentspage attributions.html\n";
     for (const QString &part: package.qtParts)
         out << "\\ingroup attributions-" << part << "\n";
 
@@ -128,34 +127,57 @@ static void generate(QTextStream &out, const Package &package, const QDir &baseD
 
     out << "\n\n";
 
+    QString copyright;
     if (!package.copyright.isEmpty())
-        out << "\n\\badcode\n" << package.copyright << "\n\\endcode\n\n";
+        copyright = package.copyright;
 
-    if (isSpdxLicenseId(package.licenseId) && package.licenseId != QLatin1String("NONE"))
+    if (!package.copyrightFile.isEmpty()) {
+        const QDir packageDir(package.path);
+        QFile file(QDir(package.path).absoluteFilePath(package.copyrightFile));
+        if (!file.open(QIODevice::ReadOnly)) {
+            if (logLevel != SilentLog) {
+                std::cerr << qPrintable(
+                        tr("Path %1 : cannot open copyright file %2.\n")
+                                .arg(QDir::toNativeSeparators(package.path))
+                                .arg(QDir::toNativeSeparators(package.copyrightFile)));
+            }
+        } else {
+            copyright = QString::fromUtf8(file.readAll());
+        }
+    }
+
+    if (!copyright.isEmpty())
+        out << "\n\\badcode\n" << copyright << "\n\\endcode\n\n";
+
+    if (isSpdxLicenseId(package.licenseId) && package.licenseId != QLatin1String("NONE")) {
         out << "\\l{https://spdx.org/licenses/" << package.licenseId << ".html}"
             << "{" << package.license << "}.\n\n";
-    else
+    } else if (package.licenseId.startsWith(QLatin1String("urn:dje:license:"))) {
+        out << "\\l{https://enterprise.dejacode.com/licenses/public/" << package.licenseId.mid(16)
+            << "/}{" << package.license << "}.\n\n";
+    } else {
         out << package.license << ".\n\n";
+    }
 
-    if (!package.licenseFile.isEmpty()) {
-        QFile file(package.licenseFile);
+    foreach (const QString &licenseFile, package.licenseFiles) {
+        QFile file(licenseFile);
         if (!file.open(QIODevice::ReadOnly)) {
-            if (logLevel != SilentLog)
-                std::cerr << qPrintable(
-                    tr("Path %1 : cannot open license file %2.")
-                        .arg(QDir::toNativeSeparators(package.path))
-                        .arg(QDir::toNativeSeparators(package.licenseFile))
-                ) << "*/\n";
+            if (logLevel != SilentLog) {
+                std::cerr << qPrintable(tr("Path %1 : cannot open license file %2.\n")
+                                                .arg(QDir::toNativeSeparators(package.path))
+                                                .arg(QDir::toNativeSeparators(licenseFile)));
+                out << "*/\n";
+            }
             return;
         }
         out << "\\badcode\n";
         out << QString::fromUtf8(file.readAll()).trimmed();
-        out << "\n\\endcode\n";
+        out << "\n\\endcode\n\n";
     }
     out << "*/\n";
 }
 
-void generate(QTextStream &out, const QVector<Package> &packages, const QString &baseDirectory,
+void generate(QTextStream &out, const QList<Package> &packages, const QString &baseDirectory,
               LogLevel logLevel)
 {
     if (logLevel == VerboseLog)

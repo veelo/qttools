@@ -45,13 +45,8 @@
 #include <QtDesigner/abstractformwindowcursor.h>
 #include <abstractdialoggui_p.h>
 
-#include <QtCore/qabstractitemmodel.h>
-#include <QtCore/qdebug.h>
-#include <QtWidgets/qaction.h>
 #include <QtWidgets/qbuttongroup.h>
 #include <QtWidgets/qmenu.h>
-#include <QtCore/qsortfilterproxymodel.h>
-#include <QtGui/qstandarditemmodel.h>
 #include <QtWidgets/qcombobox.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qitemdelegate.h>
@@ -62,6 +57,13 @@
 #include <QtWidgets/qtoolbutton.h>
 #include <QtWidgets/qbuttongroup.h>
 #include <QtWidgets/qtoolbar.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qstandarditemmodel.h>
+
+#include <QtCore/qabstractitemmodel.h>
+#include <QtCore/qdebug.h>
+#include <QtCore/qsortfilterproxymodel.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -79,9 +81,6 @@ static void addWidgetToObjectList(const QWidget *w, QStringList &r)
 
 static QStringList objectNameList(QDesignerFormWindowInterface *form)
 {
-    using ActionList = QList<QAction *>;
-    using ButtonGroupList = QList<QButtonGroup *>;
-
     QStringList result;
 
     QWidget *mainContainer = form->mainContainer();
@@ -104,30 +103,24 @@ static QStringList objectNameList(QDesignerFormWindowInterface *form)
     const QDesignerMetaDataBaseInterface *mdb = form->core()->metaDataBase();
 
     // Add managed actions and actions with managed menus
-    const ActionList actions = mainContainer->findChildren<QAction*>();
-    if (!actions.empty()) {
-        const ActionList::const_iterator cend = actions.constEnd();
-        for (ActionList::const_iterator it = actions.constBegin(); it != cend; ++it) {
-            QAction *a = *it;
-            if (!a->isSeparator()) {
-                if (QMenu *menu = a->menu()) {
-                    if (mdb->item(menu))
-                        result.push_back(menu->objectName());
-                } else {
-                    if (mdb->item(a))
-                        result.push_back(a->objectName());
-                }
+    const auto actions = mainContainer->findChildren<QAction*>();
+    for (QAction *a : actions) {
+        if (!a->isSeparator()) {
+            if (QMenu *menu = a->menu()) {
+                if (mdb->item(menu))
+                    result.push_back(menu->objectName());
+            } else {
+                if (mdb->item(a))
+                    result.push_back(a->objectName());
             }
         }
     }
 
     // Add  managed buttons groups
-    const ButtonGroupList buttonGroups = mainContainer->findChildren<QButtonGroup *>();
-    if (!buttonGroups.empty()) {
-        const ButtonGroupList::const_iterator cend = buttonGroups.constEnd();
-        for (ButtonGroupList::const_iterator it = buttonGroups.constBegin(); it != cend; ++it)
-            if (mdb->item(*it))
-                result.append((*it)->objectName());
+    const auto buttonGroups = mainContainer->findChildren<QButtonGroup *>();
+    for (QButtonGroup * b : buttonGroups) {
+        if (mdb->item(b))
+            result.append(b->objectName());
     }
 
     result.sort();
@@ -245,69 +238,77 @@ int ConnectionModel::columnCount(const QModelIndex &parent) const
     return 4;
 }
 
+const SignalSlotConnection *ConnectionModel::connectionAt(const QModelIndex &index) const
+{
+    const int row = index.row();
+    return m_editor != nullptr && row >= 0 && row < m_editor->connectionCount()
+        ? static_cast<const SignalSlotConnection*>(m_editor->connection(row))
+        : nullptr;
+}
+
 QVariant ConnectionModel::data(const QModelIndex &index, int role) const
 {
     enum { deprecatedMember = 0 };
 
-    if ((role != Qt::DisplayRole && role != Qt::EditRole && role != Qt::FontRole && role != Qt::ForegroundRole) || !m_editor)
+    const SignalSlotConnection *con = connectionAt(index);
+    if (con == nullptr)
         return QVariant();
-
-    if (index.row() < 0 || index.row() >= m_editor->connectionCount()) {
-        return QVariant();
-    }
-
-    const SignalSlotConnection *con = static_cast<SignalSlotConnection*>(m_editor->connection(index.row()));
-    Q_ASSERT(con != nullptr);
 
     // Mark deprecated slots red/italic. Not currently in use (historically for Qt 3 slots in Qt 4),
     // but may be used again in the future.
-    if (deprecatedMember && role == Qt::ForegroundRole)
-        return QColor(Qt::red);
-    if (deprecatedMember && role ==  Qt::FontRole) {
-        QFont font = QApplication::font();
-        font.setItalic(true);
-        return font;
+    switch (role) {
+    case  Qt::ForegroundRole:
+        return deprecatedMember ? QColor(Qt::red) : QVariant();
+    case Qt::FontRole:
+        if (deprecatedMember) {
+            QFont font = QApplication::font();
+            font.setItalic(true);
+            return font;
+        }
+        return QVariant();
+    case Qt::DisplayRole:
+    case Qt::EditRole:
+        return ConnectionModel::columnText(con, index.column());
+    default:
+        break;
     }
 
-    static const QVariant senderDefault = tr("<sender>");
-    static const QVariant signalDefault = tr("<signal>");
-    static const QVariant receiverDefault = tr("<receiver>");
-    static const QVariant slotDefault = tr("<slot>");
+    return QVariant();
+}
 
-    switch (index.column()) {
+QString ConnectionModel::columnText(const SignalSlotConnection *con, int column)
+{
+    static const QString senderDefault = tr("<sender>");
+    static const QString signalDefault = tr("<signal>");
+    static const QString receiverDefault = tr("<receiver>");
+    static const QString slotDefault = tr("<slot>");
+
+    switch (column) {
         case 0: {
             const QString sender = con->sender();
-            if (sender.isEmpty())
-                return senderDefault;
-            return sender;
+            return sender.isEmpty() ? senderDefault : sender;
         }
         case 1: {
-            const QString signal = con->signal();
-            if (signal.isEmpty())
-                return signalDefault;
-            return signal;
+            const QString signalName = con->signal();
+            return signalName.isEmpty() ? signalDefault : signalName;
         }
         case 2: {
             const QString receiver = con->receiver();
-            if (receiver.isEmpty())
-                return receiverDefault;
-            return receiver;
+            return receiver.isEmpty() ? receiverDefault : receiver;
         }
         case 3: {
-            const QString slot = con->slot();
-            if (slot.isEmpty())
-                return slotDefault;
-            return slot;
+            const QString slotName = con->slot();
+            return slotName.isEmpty() ? slotDefault : slotName;
         }
     }
-    return QVariant();
+    return QString();
 }
 
 bool ConnectionModel::setData(const QModelIndex &index, const QVariant &data, int)
 {
     if (!index.isValid() || !m_editor)
         return false;
-    if (data.type() != QVariant::String)
+    if (data.metaType().id() != QMetaType::QString)
         return false;
 
     SignalSlotConnection *con = static_cast<SignalSlotConnection*>(m_editor->connection(index.row()));
@@ -391,7 +392,7 @@ void ConnectionModel::connectionChanged(Connection *con)
 
 void ConnectionModel::updateAll()
 {
-    emit dataChanged(index(0, 0), index(rowCount(), columnCount()));
+    emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1));
 }
 }
 
@@ -517,7 +518,7 @@ InlineEditor::InlineEditor(QWidget *parent) :
     setModel(m_model = new InlineEditorModel(0, 4, this));
     setFrame(false);
     m_idx = -1;
-    connect(this, QOverload<int>::of(&QComboBox::activated),
+    connect(this, &QComboBox::activated,
             this, &InlineEditor::checkSelection);
 }
 
@@ -591,7 +592,7 @@ ConnectionDelegate::ConnectionDelegate(QWidget *parent)
         factory = new QItemEditorFactory;
         QItemEditorCreatorBase *creator
             = new QItemEditorCreator<InlineEditor>("text");
-        factory->registerEditor(QVariant::String, creator);
+        factory->registerEditor(QMetaType::QString, creator);
     }
 
     setItemEditorFactory(factory);
@@ -655,7 +656,7 @@ QWidget *ConnectionDelegate::createEditor(QWidget *parent,
         break;
     }
 
-    connect(inline_editor, QOverload<int>::of(&QComboBox::activated),
+    connect(inline_editor, &QComboBox::activated,
             this, &ConnectionDelegate::emitCommitData);
 
     return inline_editor;
@@ -734,13 +735,15 @@ void SignalSlotEditorWindow::setActiveFormWindow(QDesignerFormWindowInterface *f
                     this, &SignalSlotEditorWindow::updateEditorSelection);
         disconnect(m_editor.data(), &SignalSlotEditor::connectionSelected,
                    this, &SignalSlotEditorWindow::updateDialogSelection);
+        disconnect(m_editor.data(), &SignalSlotEditor::connectionAdded,
+                   this, &SignalSlotEditorWindow::resizeColumns);
         if (integration) {
             disconnect(integration, &QDesignerIntegrationInterface::objectNameChanged,
                        this, &SignalSlotEditorWindow::objectNameChanged);
         }
     }
 
-    m_editor = form->findChild<SignalSlotEditor*>();
+    m_editor = form ? form->findChild<SignalSlotEditor*>() : nullptr;
     m_model->setEditor(m_editor);
     if (!m_editor.isNull()) {
         ConnectionDelegate *delegate
@@ -753,12 +756,15 @@ void SignalSlotEditorWindow::setActiveFormWindow(QDesignerFormWindowInterface *f
                 this, &SignalSlotEditorWindow::updateEditorSelection);
         connect(m_editor.data(), &SignalSlotEditor::connectionSelected,
                 this, &SignalSlotEditorWindow::updateDialogSelection);
+        connect(m_editor.data(), &SignalSlotEditor::connectionAdded,
+                this, &SignalSlotEditorWindow::resizeColumns);
         if (integration) {
             connect(integration, &QDesignerIntegrationInterface::objectNameChanged,
                     this, &SignalSlotEditorWindow::objectNameChanged);
         }
     }
 
+    resizeColumns();
     updateUi();
 }
 
@@ -768,9 +774,10 @@ void SignalSlotEditorWindow::updateDialogSelection(Connection *con)
         return;
 
     QModelIndex index = m_proxy_model->mapFromSource(m_model->connectionToIndex(con));
-    if (index == m_view->currentIndex())
+    if (!index.isValid() || index == m_view->currentIndex())
         return;
     m_handling_selection_change = true;
+    m_view->scrollTo(index, QTreeView::EnsureVisible);
     m_view->setCurrentIndex(index);
     m_handling_selection_change = false;
 
@@ -824,6 +831,12 @@ void SignalSlotEditorWindow::updateUi()
 {
     m_add_button->setEnabled(!m_editor.isNull());
     m_remove_button->setEnabled(!m_editor.isNull() && m_view->currentIndex().isValid());
+}
+
+void SignalSlotEditorWindow::resizeColumns()
+{
+    for (int c = 0, count = m_model->columnCount(); c < count; ++c)
+        m_view->resizeColumnToContents(c);
 }
 
 } // namespace qdesigner_internal

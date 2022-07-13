@@ -28,12 +28,14 @@
 
 #include "qdbusmodel.h"
 
-#include <QtCore/qvector.h>
 #include <QtCore/QDebug>
-#include <QtXml/QDomDocument>
+#include <QtCore/QList>
+
 #include <QtDBus/QDBusObjectPath>
 #include <QtDBus/QDBusInterface>
 #include <QtDBus/QDBusReply>
+
+#include <QtXml/QDomDocument>
 
 struct QDBusItem
 {
@@ -62,7 +64,7 @@ struct QDBusItem
 
     QDBusModel::Type type;
     QDBusItem *parent;
-    QVector<QDBusItem *> children;
+    QList<QDBusItem *> children;
     bool isPrefetched;
     QString name;
     QString caption;
@@ -305,7 +307,7 @@ QString QDBusModel::dBusTypeSignature(const QModelIndex &index) const
 
 QModelIndex QDBusModel::findObject(const QDBusObjectPath &objectPath)
 {
-    QStringList path = objectPath.path().split(QLatin1Char('/'), QString::SkipEmptyParts);
+    QStringList path = objectPath.path().split(QLatin1Char('/'), Qt::SkipEmptyParts);
 
     QDBusItem *item = root;
     int childIdx = -1;

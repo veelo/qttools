@@ -34,8 +34,8 @@
 #include <promotiontaskmenu_p.h>
 #include <qdesigner_command_p.h>
 
-#include <QtWidgets/qaction.h>
-#include <QtWidgets/qundostack.h>
+#include <QtGui/qaction.h>
+#include <QtGui/qundostack.h>
 
 #include <QtCore/qdebug.h>
 
@@ -58,7 +58,7 @@ namespace qdesigner_internal {
     {
         if (ToolBarEventFilter *ef = ToolBarEventFilter::eventFilterOf(m_toolBar))
             return ef->contextMenuActions();
-        return QList<QAction*>();
+        return {};
     }
 
     // ------------ StatusBarTaskMenu

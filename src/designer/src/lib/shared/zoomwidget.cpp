@@ -31,10 +31,11 @@
 #include <QtWidgets/qgraphicsscene.h>
 #include <QtWidgets/qgraphicsproxywidget.h>
 #include <QtWidgets/qmenu.h>
-#include <QtWidgets/qaction.h>
-#include <QtWidgets/qactiongroup.h>
-#include <QtGui/qevent.h>
 #include <QtWidgets/qscrollbar.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qactiongroup.h>
+#include <QtGui/qevent.h>
 
 #include <QtCore/qtextstream.h>
 #include <QtCore/qmath.h>
@@ -42,9 +43,6 @@
 #include <QtCore/qlist.h>
 
 QT_BEGIN_NAMESPACE
-
-using ActionList = QList<QAction *>;
-using GraphicsItemList = QList<QGraphicsItem *>;
 
 enum { debugZoomWidget = 0 };
 
@@ -77,11 +75,10 @@ int ZoomMenu::zoomOf(const QAction *a)
 
 void ZoomMenu::addActions(QMenu *m)
 {
-    const ActionList za = m_menuActions->actions();
-    const ActionList::const_iterator cend = za.constEnd();
-    for (ActionList::const_iterator it =  za.constBegin(); it != cend; ++it) {
-        m->addAction(*it);
-        if (zoomOf(*it)  == 100)
+    const auto za = m_menuActions->actions();
+    for (QAction *a : za) {
+        m->addAction(a);
+        if (zoomOf(a) == 100)
             m->addSeparator();
     }
 }
@@ -93,13 +90,13 @@ int ZoomMenu::zoom() const
 
 void ZoomMenu::setZoom(int percent)
 {
-    const ActionList za = m_menuActions->actions();
-    const ActionList::const_iterator cend = za.constEnd();
-    for (ActionList::const_iterator it =  za.constBegin(); it != cend; ++it)
-        if (zoomOf(*it) == percent) {
-            (*it)->setChecked(true);
+    const auto za = m_menuActions->actions();
+    for (QAction *a : za) {
+        if (zoomOf(a) == percent) {
+            a->setChecked(true);
             return;
         }
+    }
 }
 
 void ZoomMenu::slotZoomMenu(QAction *a)
@@ -107,9 +104,9 @@ void ZoomMenu::slotZoomMenu(QAction *a)
     emit zoomChanged(zoomOf(a));
 }
 
-QVector<int> ZoomMenu::zoomValues()
+QList<int> ZoomMenu::zoomValues()
 {
-    QVector<int> rc;
+    QList<int> rc;
     const int nz = sizeof(menuZoomList)/sizeof(int);
     rc.reserve(nz);
     for (int i = 0; i < nz; i++)
@@ -290,7 +287,7 @@ ZoomWidget::ZoomWidget(QWidget *parent) :
 void ZoomWidget::setWidget(QWidget *w, Qt::WindowFlags wFlags)
 {
     if (debugZoomWidget)
-        qDebug() << "ZoomWidget::setWidget" << w << bin << wFlags;
+        qDebug() << "ZoomWidget::setWidget" << w << Qt::bin << wFlags;
 
     if (m_proxy) {
         scene().removeItem(m_proxy);
@@ -520,7 +517,7 @@ void ZoomWidget::dump() const
 {
 
     qDebug() << "ZoomWidget::dump " << geometry() << " Viewport " << viewport()->geometry()
-        << "Scroll: " << scrollPosition() << "Matrix: " << matrix() << " SceneRect: " << sceneRect();
+        << "Scroll: " << scrollPosition() << "Transform: " << transform() << " SceneRect: " << sceneRect();
     if (m_proxy) {
         qDebug() << "Proxy Pos: " << m_proxy->pos() << "Proxy " << m_proxy->size()
             << "\nProxy size hint"

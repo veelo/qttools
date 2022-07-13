@@ -91,14 +91,11 @@ PreviewActionGroup::PreviewActionGroup(QDesignerFormEditorInterface *core, QObje
 
 void PreviewActionGroup::updateDeviceProfiles()
 {
-    using DeviceProfileList = QList<DeviceProfile>;
-    using ActionList = QList<QAction *>;
-
     const QDesignerSharedSettings settings(m_core);
-    const DeviceProfileList profiles = settings.deviceProfiles();
-    const ActionList al = actions();
+    const auto profiles = settings.deviceProfiles();
+    const auto al = actions();
     // Separator?
-    const bool hasProfiles = !profiles.empty();
+    const bool hasProfiles = !profiles.isEmpty();
     al.at(MaxDeviceActions)->setVisible(hasProfiles);
     int index = 0;
     if (hasProfiles) {
@@ -119,11 +116,11 @@ void PreviewActionGroup::slotTriggered(QAction *a)
 {
     // Device or style according to data.
     const QVariant data = a->data();
-    switch (data.type()) {
-    case QVariant::String:
+    switch (data.metaType().id()) {
+    case QMetaType::QString:
         emit preview(data.toString(), -1);
         break;
-    case QVariant::Int:
+    case QMetaType::Int:
         emit preview(QString(), data.toInt());
         break;
     default:

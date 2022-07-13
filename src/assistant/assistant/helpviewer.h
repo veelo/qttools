@@ -34,11 +34,13 @@
 #include <QtCore/QUrl>
 #include <QtCore/QVariant>
 
-#include <QtWidgets/QAction>
+#include <QtGui/QAction>
 #include <QtGui/QFont>
 
 #if defined(BROWSER_QTWEBKIT)
 #  include <QWebView>
+#elif defined(BROWSER_QTWEBENGINE)
+#  include <QtWebEngineWidgets/QWebEngineView>
 #elif defined(BROWSER_QTEXTBROWSER)
 #  include <QtWidgets/QTextBrowser>
 #endif
@@ -46,10 +48,14 @@
 QT_BEGIN_NAMESPACE
 
 class HelpEngineWrapper;
+class QPrinter;
 
 #if defined(BROWSER_QTWEBKIT)
 #define TEXTBROWSER_OVERRIDE
 class HelpViewer : public QWebView
+#elif defined(BROWSER_QTWEBENGINE)
+#define TEXTBROWSER_OVERRIDE
+class HelpViewer : public QWebEngineView
 #elif defined(BROWSER_QTEXTBROWSER)
 #define TEXTBROWSER_OVERRIDE override
 class HelpViewer : public QTextBrowser
@@ -82,7 +88,11 @@ public:
     void setTitle(const QString &title);
 
     QUrl source() const;
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0) || BROWSER_QTWEBENGINE
     void setSource(const QUrl &url) TEXTBROWSER_OVERRIDE;
+#else
+    void doSetSource(const QUrl &url, QTextDocument::ResourceType type) TEXTBROWSER_OVERRIDE;
+#endif
 
     QString selectedText() const;
     bool isForwardAvailable() const;
@@ -101,7 +111,7 @@ public:
     static bool launchWithExternalApp(const QUrl &url);
 
 public slots:
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
     void copy();
 #endif
     void home() TEXTBROWSER_OVERRIDE;
@@ -117,7 +127,7 @@ signals:
     void sourceChanged(const QUrl &url);
     void forwardAvailable(bool enabled);
     void backwardAvailable(bool enabled);
-    void highlighted(const QString &link);
+    void highlighted(const QUrl &link);
     void printRequested();
 #elif !defined(BROWSER_QTWEBKIT)
     // Provide signals present in QWebView for browsers that do not inherit QWebView
@@ -130,6 +140,7 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void resizeEvent(QResizeEvent *e) override;
 
 private slots:
     void actionChanged();
@@ -141,6 +152,7 @@ private:
     void contextMenuEvent(QContextMenuEvent *event) override;
     QVariant loadResource(int type, const QUrl &name) TEXTBROWSER_OVERRIDE;
     bool handleForwardBackwardMouseButtons(QMouseEvent *e);
+    void scrollToTextPosition(int position);
 
 private:
     HelpViewerPrivate *d;

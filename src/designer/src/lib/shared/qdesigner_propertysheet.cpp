@@ -39,18 +39,23 @@
 #include <QtDesigner/abstractformeditor.h>
 #include <QtDesigner/abstractwidgetdatabase.h>
 
-#include <QtCore/qdebug.h>
-
 #include <QtWidgets/qlayout.h>
 #include <QtWidgets/qdockwidget.h>
 #include <QtWidgets/qdialog.h>
+#include <QtWidgets/qgroupbox.h>
 #include <QtWidgets/qlabel.h>
 #include <QtWidgets/qgroupbox.h>
 #include <QtWidgets/qstyle.h>
+#include <QtWidgets/qabstractbutton.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qtoolbar.h>
 #include <QtWidgets/qmainwindow.h>
 #include <QtWidgets/qmenubar.h>
+#include <QtWidgets/qheaderview.h>
+
+#include <QtGui/qaction.h>
+
+#include <QtCore/qdebug.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -173,6 +178,7 @@ class QDesignerPropertySheetPrivate {
 public:
     using PropertyType = QDesignerPropertySheet::PropertyType;
     using ObjectType = QDesignerPropertySheet::ObjectType;
+    using ObjectFlags = QDesignerPropertySheet::ObjectFlags;
 
     explicit QDesignerPropertySheetPrivate(QDesignerPropertySheet *sheetPublic, QObject *object, QObject *sheetParent);
 
@@ -186,7 +192,7 @@ public:
 
     bool isReloadableProperty(int index) const;
     bool isResourceProperty(int index) const;
-    void addResourceProperty(int index, QVariant::Type type);
+    void addResourceProperty(int index, int type);
     QVariant resourceProperty(int index) const;
     void setResourceProperty(int index, const QVariant &value);
     QVariant emptyResourceProperty(int index) const; // of type PropertySheetPixmapValue / PropertySheetIconValue
@@ -227,6 +233,7 @@ public:
     QDesignerFormEditorInterface *m_core;
     const QDesignerMetaObjectInterface *m_meta;
     const ObjectType m_objectType;
+    const ObjectFlags m_objectFlags;
 
     using InfoHash = QHash<int, Info>;
     InfoHash m_info;
@@ -264,7 +271,7 @@ bool QDesignerPropertySheetPrivate::isReloadableProperty(int index) const
     return isResourceProperty(index)
            || propertyType(index) == QDesignerPropertySheet::PropertyStyleSheet
            || propertyType(index) == QDesignerPropertySheet::PropertyText
-           || q->property(index).type() == QVariant::Url;
+           || q->property(index).metaType().id() == QMetaType::QUrl;
 }
 
 /*
@@ -279,11 +286,11 @@ bool QDesignerPropertySheetPrivate::isResourceProperty(int index) const
     return m_resourceProperties.contains(index);
 }
 
-void QDesignerPropertySheetPrivate::addResourceProperty(int index, QVariant::Type type)
+void QDesignerPropertySheetPrivate::addResourceProperty(int index, int type)
 {
-    if (type == QVariant::Pixmap)
+    if (type == QMetaType::QPixmap)
         m_resourceProperties.insert(index, QVariant::fromValue(qdesigner_internal::PropertySheetPixmapValue()));
-    else if (type == QVariant::Icon)
+    else if (type == QMetaType::QIcon)
         m_resourceProperties.insert(index, QVariant::fromValue(qdesigner_internal::PropertySheetIconValue()));
 }
 
@@ -388,6 +395,7 @@ QDesignerPropertySheetPrivate::QDesignerPropertySheetPrivate(QDesignerPropertySh
     m_core(formEditorForObject(sheetParent)),
     m_meta(m_core->introspection()->metaObject(object)),
     m_objectType(QDesignerPropertySheet::objectTypeFromObject(object)),
+    m_objectFlags(QDesignerPropertySheet::objectFlagsFromObject(object)),
     m_canHaveLayoutAttributes(hasLayoutAttributes(m_core, object)),
     m_object(object),
     m_lastLayout(nullptr),
@@ -470,7 +478,7 @@ QString QDesignerPropertySheetPrivate::transformLayoutPropertyName(int index) co
 {
     using TypeNameMap = QMap<QDesignerPropertySheet::PropertyType, QString>;
     static TypeNameMap typeNameMap;
-    if (typeNameMap.empty()) {
+    if (typeNameMap.isEmpty()) {
         typeNameMap.insert(QDesignerPropertySheet::PropertyLayoutObjectName, QStringLiteral("objectName"));
         typeNameMap.insert(QDesignerPropertySheet::PropertyLayoutLeftMargin, QStringLiteral("leftMargin"));
         typeNameMap.insert(QDesignerPropertySheet::PropertyLayoutTopMargin, QStringLiteral("topMargin"));
@@ -515,11 +523,22 @@ QDesignerPropertySheet::ObjectType QDesignerPropertySheet::objectTypeFromObject(
     return ObjectNone;
 }
 
+QDesignerPropertySheet::ObjectFlags QDesignerPropertySheet::objectFlagsFromObject(const QObject *o)
+{
+    ObjectFlags result;
+    if ((o->isWidgetType() && (qobject_cast<const QAbstractButton *>(o)
+                               || qobject_cast<const QGroupBox *>(o)))
+        || qobject_cast<const QAction *>(o)) {
+        result |= CheckableProperty;
+    }
+    return result;
+}
+
 QDesignerPropertySheet::PropertyType QDesignerPropertySheet::propertyTypeFromName(const QString &name)
 {
     typedef QHash<QString, PropertyType> PropertyTypeHash;
     static PropertyTypeHash propertyTypeHash;
-    if (propertyTypeHash.empty()) {
+    if (propertyTypeHash.isEmpty()) {
         propertyTypeHash.insert(QLatin1String(layoutObjectNameC),         PropertyLayoutObjectName);
         propertyTypeHash.insert(QLatin1String(layoutLeftMarginC),         PropertyLayoutLeftMargin);
         propertyTypeHash.insert(QLatin1String(layoutTopMarginC),          PropertyLayoutTopMargin);
@@ -540,9 +559,11 @@ QDesignerPropertySheet::PropertyType QDesignerPropertySheet::propertyTypeFromNam
         propertyTypeHash.insert(QLatin1String(layoutGridColumnMinimumWidthC),    PropertyLayoutGridColumnMinimumWidth);
         propertyTypeHash.insert(QStringLiteral("buddy"),                   PropertyBuddy);
         propertyTypeHash.insert(QStringLiteral("geometry"),                PropertyGeometry);
+        propertyTypeHash.insert(QStringLiteral("checked"),                 PropertyChecked);
         propertyTypeHash.insert(QStringLiteral("checkable"),               PropertyCheckable);
         propertyTypeHash.insert(QStringLiteral("accessibleName"),          PropertyAccessibility);
         propertyTypeHash.insert(QStringLiteral("accessibleDescription"),   PropertyAccessibility);
+        propertyTypeHash.insert(QStringLiteral("visible"),                 PropertyVisible);
         propertyTypeHash.insert(QStringLiteral("windowTitle"),             PropertyWindowTitle);
         propertyTypeHash.insert(QStringLiteral("windowIcon"),              PropertyWindowIcon);
         propertyTypeHash.insert(QStringLiteral("windowFilePath"),          PropertyWindowFilePath);
@@ -579,7 +600,7 @@ QDesignerPropertySheet::QDesignerPropertySheet(QObject *object, QObject *parent)
     for (int index=0; index<count(); ++index) {
         const QDesignerMetaPropertyInterface *p = d->m_meta->property(index);
         const QString name = p->name();
-        if (p->type() == QVariant::KeySequence) {
+        if (p->type() == QMetaType::QKeySequence) {
             createFakeProperty(name);
         } else {
             setVisible(index, false); // use the default for `real' properties
@@ -595,22 +616,22 @@ QDesignerPropertySheet::QDesignerPropertySheet(QObject *object, QObject *parent)
         info.group = pgroup;
         info.propertyType = propertyTypeFromName(name);
 
-        const QVariant::Type type = p->type();
+        const int type = p->type();
         switch (type) {
-        case QVariant::Cursor:
-        case QVariant::Icon:
-        case QVariant::Pixmap:
+        case QMetaType::QCursor:
+        case QMetaType::QIcon:
+        case QMetaType::QPixmap:
             info.defaultValue = p->read(d->m_object);
-            if (type == QVariant::Icon || type == QVariant::Pixmap)
+            if (type == QMetaType::QIcon || type == QMetaType::QPixmap)
                 d->addResourceProperty(index, type);
             break;
-        case QVariant::String:
+        case QMetaType::QString:
             d->addStringProperty(index);
             break;
-        case QVariant::StringList:
+        case QMetaType::QStringList:
             d->addStringListProperty(index);
             break;
-        case QVariant::KeySequence:
+        case QMetaType::QKeySequence:
             d->addKeySequenceProperty(index);
             break;
         default:
@@ -676,7 +697,7 @@ QDesignerPropertySheet::QDesignerPropertySheet(QObject *object, QObject *parent)
 
     using ByteArrayList = QList<QByteArray>;
     const ByteArrayList names = object->dynamicPropertyNames();
-    if (!names.empty()) {
+    if (!names.isEmpty()) {
         const ByteArrayList::const_iterator cend =  names.constEnd();
         for (ByteArrayList::const_iterator it = names.constBegin(); it != cend; ++it) {
             const char* cName = it->constData();
@@ -729,17 +750,24 @@ int QDesignerPropertySheet::addDynamicProperty(const QString &propName, const QV
         return -1;
 
     QVariant v = value;
-    if (value.type() == QVariant::Icon)
+    switch (value.metaType().id()) {
+    case QMetaType::QIcon:
         v = QVariant::fromValue(qdesigner_internal::PropertySheetIconValue());
-    else if (value.type() == QVariant::Pixmap)
+        break;
+    case QMetaType::QPixmap:
         v = QVariant::fromValue(qdesigner_internal::PropertySheetPixmapValue());
-    else if (value.type() == QVariant::String)
+        break;
+    case QMetaType::QString:
         v = QVariant::fromValue(qdesigner_internal::PropertySheetStringValue(value.toString()));
-    else if (value.type() == QVariant::StringList)
+        break;
+    case QMetaType::QStringList:
         v = QVariant::fromValue(qdesigner_internal::PropertySheetStringListValue(value.toStringList()));
-    else if (value.type() == QVariant::KeySequence) {
+        break;
+    case QMetaType::QKeySequence: {
         const QKeySequence keySequence = qvariant_cast<QKeySequence>(value);
         v = QVariant::fromValue(qdesigner_internal::PropertySheetKeySequenceValue(keySequence));
+    }
+        break;
     }
 
     if (d->m_addIndex.contains(propName)) {
@@ -752,12 +780,18 @@ int QDesignerPropertySheet::addDynamicProperty(const QString &propName, const QV
         Info &info = d->ensureInfo(index);
         info.defaultValue = value;
         info.kind = QDesignerPropertySheetPrivate::DynamicProperty;
-        if (value.type() == QVariant::Icon || value.type() == QVariant::Pixmap)
-            d->addResourceProperty(idx, value.type());
-        else if (value.type() == QVariant::String)
+        switch (value.metaType().id()) {
+        case QMetaType::QIcon:
+        case QMetaType::QPixmap:
+            d->addResourceProperty(idx, value.metaType().id());
+            break;
+        case QMetaType::QString:
             d->addStringProperty(idx);
-        else if (value.type() == QVariant::KeySequence)
+            break;
+        case QMetaType::QKeySequence:
             d->addKeySequenceProperty(idx);
+            break;
+        }
         return idx;
     }
 
@@ -770,18 +804,18 @@ int QDesignerPropertySheet::addDynamicProperty(const QString &propName, const QV
     info.defaultValue = value;
     info.kind = QDesignerPropertySheetPrivate::DynamicProperty;
     setPropertyGroup(index, tr("Dynamic Properties"));
-    switch (value.type()) {
-    case QVariant::Icon:
-    case QVariant::Pixmap:
-        d->addResourceProperty(index, value.type());
+    switch (value.metaType().id()) {
+    case QMetaType::QIcon:
+    case QMetaType::QPixmap:
+        d->addResourceProperty(index, value.metaType().id());
         break;
-    case QVariant::String:
+    case QMetaType::QString:
         d->addStringProperty(index);
         break;
-    case QVariant::StringList:
+    case QMetaType::QStringList:
         d->addStringListProperty(index);
         break;
-    case QVariant::KeySequence:
+    case QMetaType::QKeySequence:
         d->addKeySequenceProperty(index);
         break;
     default:
@@ -893,12 +927,17 @@ int QDesignerPropertySheet::createFakeProperty(const QString &propertyName, cons
         info.visible = false;
         info.kind = QDesignerPropertySheetPrivate::FakeProperty;
         QVariant v = value.isValid() ? value : metaProperty(index);
-        if (v.type() == QVariant::String)
+        switch (v.metaType().id()) {
+        case QMetaType::QString:
             v = QVariant::fromValue(qdesigner_internal::PropertySheetStringValue());
-        if (v.type() == QVariant::StringList)
+            break;
+        case QMetaType::QStringList:
             v = QVariant::fromValue(qdesigner_internal::PropertySheetStringListValue());
-        if (v.type() == QVariant::KeySequence)
+            break;
+        case QMetaType::QKeySequence:
             v = QVariant::fromValue(qdesigner_internal::PropertySheetKeySequenceValue());
+            break;
+        }
         d->m_fakeProperties.insert(index, v);
         return index;
     }
@@ -1048,7 +1087,22 @@ QVariant QDesignerPropertySheet::property(int index) const
         return QVariant::fromValue(value);
     }
 
-    return metaProperty(index);
+    QVariant result =  metaProperty(index);
+    // QTBUG-49591: "visible" is only exposed for QHeaderView as a fake
+    // property ("headerVisible") for the item view. If the item view is not
+    // visible (on a page based container), check the WA_WState_Hidden instead,
+    // since otherwise false is returned when saving.
+    if (result.typeId() == QMetaType::Bool && !result.toBool()
+        && d->m_object->isWidgetType()
+        && propertyType(index) == PropertyVisible) {
+        if (auto *hv = qobject_cast<QHeaderView *>(d->m_object)) {
+            if (auto *parent = hv->parentWidget())  {
+                if (!parent->isVisible())
+                    result = QVariant(!hv->testAttribute(Qt::WA_WState_Hidden));
+            }
+        }
+    }
+    return result;
 }
 
 QVariant QDesignerPropertySheet::metaProperty(int index) const
@@ -1124,12 +1178,12 @@ void QDesignerPropertySheet::setFakeProperty(int index, const QVariant &value)
         qdesigner_internal::PropertySheetFlagValue f = qvariant_cast<qdesigner_internal::PropertySheetFlagValue>(v);
         f.value = value.toInt();
         v.setValue(f);
-        Q_ASSERT(value.type() == QVariant::Int);
+        Q_ASSERT(value.metaType().id() == QMetaType::Int);
     } else if (v.canConvert<qdesigner_internal::PropertySheetEnumValue>()) {
         qdesigner_internal::PropertySheetEnumValue e = qvariant_cast<qdesigner_internal::PropertySheetEnumValue>(v);
         e.value = value.toInt();
         v.setValue(e);
-        Q_ASSERT(value.type() == QVariant::Int);
+        Q_ASSERT(value.metaType().id() == QMetaType::Int);
     } else {
         v = value;
     }
@@ -1142,7 +1196,7 @@ void QDesignerPropertySheet::clearFakeProperties()
 
 // Buddy needs to be byte array, else uic won't work
 static QVariant toByteArray(const QVariant &value) {
-    if (value.type() == QVariant::ByteArray)
+    if (value.metaType().id() == QMetaType::QByteArray)
         return value;
     const QByteArray ba = value.toString().toUtf8();
     return QVariant(ba);
@@ -1440,23 +1494,13 @@ bool QDesignerPropertySheet::isFakeLayoutProperty(int index) const
     return false;
 }
 
-// Determine the "designable" state of a property. Properties, which have
-// a per-object boolean test function that returns false are shown in
-// disabled state ("checked" depending on "checkable", etc.)
-// Properties, which are generally not designable independent
-// of the object are not shown at all.
-enum DesignableState { PropertyIsDesignable,
-                       // Object has a Designable test function that returns false.
-                       PropertyOfObjectNotDesignable,
-                       PropertyNotDesignable };
-
-static inline DesignableState designableState(const QDesignerMetaPropertyInterface *p, const QObject *object)
-{
-    if (p->attributes(object) & QDesignerMetaPropertyInterface::DesignableAttribute)
-        return PropertyIsDesignable;
-    return (p->attributes() & QDesignerMetaPropertyInterface::DesignableAttribute) ?
-            PropertyOfObjectNotDesignable : PropertyNotDesignable;
-}
+// Visible vs. Enabled: In Qt 5, it was possible to define a boolean function
+// for the DESIGNABLE attribute of Q_PROPERTY. Qt Designer would use that to
+// determine isEnabled() for the property and return isVisible() = false
+// for properties that specified 'false' for DESIGNABLE.
+// This was used for example for the "checked" property of QAbstractButton,
+// QGroupBox and QAction, where "checkable" would determine isEnabled().
+// This is now implemented by querying the property directly.
 
 bool QDesignerPropertySheet::isVisible(int index) const
 {
@@ -1532,8 +1576,7 @@ bool QDesignerPropertySheet::isVisible(int index) const
     if  (!(p->accessFlags() & QDesignerMetaPropertyInterface::WriteAccess))
          return false;
 
-    // Enabled handling: Hide only statically not designable properties
-    return designableState(p, d->m_object) != PropertyNotDesignable;
+    return p->attributes().testFlag(QDesignerMetaPropertyInterface::DesignableAttribute);
 }
 
 void QDesignerPropertySheet::setVisible(int index, bool visible)
@@ -1567,8 +1610,16 @@ bool QDesignerPropertySheet::isEnabled(int index) const
     // as this might be done via TaskMenu/Cursor::setProperty. Note that those
     // properties are not visible.
     const QDesignerMetaPropertyInterface *p = d->m_meta->property(index);
-    return (p->accessFlags() & QDesignerMetaPropertyInterface::WriteAccess) &&
-           designableState(p, d->m_object) != PropertyOfObjectNotDesignable;
+    if (!p->accessFlags().testFlag(QDesignerMetaPropertyInterface::WriteAccess))
+        return false;
+
+    if (!p->attributes().testFlag(QDesignerMetaPropertyInterface::DesignableAttribute))
+        return false;
+
+    const PropertyType type = propertyType(index);
+    if (type == PropertyChecked && d->m_objectFlags.testFlag(CheckableProperty))
+        return d->m_object->property("checkable").toBool();
+    return true;
 }
 
 bool QDesignerPropertySheet::isAttribute(int index) const
@@ -1657,16 +1708,16 @@ QObject *QDesignerAbstractPropertySheetFactory::extension(QObject *object, const
 
 void QDesignerAbstractPropertySheetFactory::objectDestroyed(QObject *object)
 {
-    QMutableMapIterator<QObject*, QObject*> it(m_impl->m_extensions);
-    while (it.hasNext()) {
-        it.next();
+    for (auto it = m_impl->m_extensions.begin(), end = m_impl->m_extensions.end(); it != end; /*erasing*/) {
         if (it.key() == object || it.value() == object) {
             if (it.key() == object) {
                 QObject *ext = it.value();
                 disconnect(ext, &QObject::destroyed, this, &QDesignerAbstractPropertySheetFactory::objectDestroyed);
                 delete ext;
             }
-            it.remove();
+            it = m_impl->m_extensions.erase(it);
+        } else {
+            ++it;
         }
     }
 }

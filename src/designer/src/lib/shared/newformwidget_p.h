@@ -46,11 +46,13 @@
 #include <QtDesigner/abstractnewformwidget.h>
 
 #include <QtWidgets/qwidget.h>
+
 #include <QtGui/qpixmap.h>
 
-#include <QtCore/qstringlist.h>
-#include <QtCore/qpair.h>
+#include <QtCore/qlist.h>
 #include <QtCore/qmap.h>
+#include <QtCore/qpair.h>
+#include <QtCore/qstringlist.h>
 
 QT_BEGIN_NAMESPACE
 

@@ -52,7 +52,10 @@ QT_BEGIN_NAMESPACE
 
 static void openHelp()
 {
-    QDesktopServices::openUrl(QUrl(QLatin1String("http://doc.qt.io/qt-5/qtdistancefieldgenerator-index.html")));
+    const int qtVersion = QT_VERSION;
+    QString url;
+    QTextStream(&url) << "https://doc.qt.io/qt-" << (qtVersion >> 16) << "/qtdistancefieldgenerator-index.html";
+    QDesktopServices::openUrl(QUrl(url));
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -417,10 +420,20 @@ QByteArray MainWindow::createSfntTable()
         header.minorVersion = 12;
         header.pixelSize = qToBigEndian(quint16(qRound(m_model->pixelSize())));
 
+        const quint8 padding = 2;
+        qreal scaleFactor = qreal(1) / QT_DISTANCEFIELD_SCALE(m_model->doubleGlyphResolution());
+        const int radius = QT_DISTANCEFIELD_RADIUS(m_model->doubleGlyphResolution())
+                / QT_DISTANCEFIELD_SCALE(m_model->doubleGlyphResolution());
+
         quint32 textureSize = ui->sbMaximumTextureSize->value();
+
+        // Since we are using a single area allocator that spans all textures, we need
+        // to split the textures one row before the actual maximum size, otherwise
+        // glyphs that fall on the edge between two textures will expand the texture
+        // they are assigned to, and this will end up being larger than the max.
+        textureSize -= quint32(qCeil(m_model->pixelSize() * scaleFactor) + radius * 2 + padding * 2);
         header.textureSize = qToBigEndian(textureSize);
 
-        const quint8 padding = 2;
         header.padding = padding;
         header.flags = m_model->doubleGlyphResolution() ? 1 : 0;
         header.numGlyphs = qToBigEndian(quint32(list.size()));
@@ -428,8 +441,7 @@ QByteArray MainWindow::createSfntTable()
                      sizeof(QtdfHeader));
 
         // Maximum height allocator to find optimal number of textures
-        QRect allocatedArea;
-        QVector<QRect> allocatedAreaPerTexture;
+        QList<QRect> allocatedAreaPerTexture;
 
         struct GlyphData {
             QSGDistanceFieldGlyphCache::TexCoord texCoord;
@@ -437,18 +449,14 @@ QByteArray MainWindow::createSfntTable()
             QSize glyphSize;
             int textureIndex;
         };
-        QVector<GlyphData> glyphDatas;
+        QList<GlyphData> glyphDatas;
         glyphDatas.resize(m_model->rowCount());
 
         int textureCount = 0;
 
         {
-            qreal scaleFactor = qreal(1) / QT_DISTANCEFIELD_SCALE(m_model->doubleGlyphResolution());
             QTransform scaleDown;
             scaleDown.scale(scaleFactor, scaleFactor);
-
-            const int radius = QT_DISTANCEFIELD_RADIUS(m_model->doubleGlyphResolution())
-                    / QT_DISTANCEFIELD_SCALE(m_model->doubleGlyphResolution());
 
             {
                 bool foundOptimalSize = false;
@@ -466,6 +474,7 @@ QByteArray MainWindow::createSfntTable()
                         glyphData.boundingRect = scaleDown.mapRect(path.boundingRect());
                         int glyphWidth = qCeil(glyphData.boundingRect.width()) + radius * 2;
                         int glyphHeight = qCeil(glyphData.boundingRect.height()) + radius * 2;
+
                         glyphData.glyphSize = QSize(glyphWidth + padding * 2, glyphHeight + padding * 2);
 
                         if (glyphData.glyphSize.width() > qint32(textureSize)
@@ -482,14 +491,13 @@ QByteArray MainWindow::createSfntTable()
                             break;
 
                         glyphData.textureIndex = rect.y() / textureSize;
-                        if (glyphData.textureIndex >= allocatedAreaPerTexture.size())
-                            allocatedAreaPerTexture.resize(glyphData.textureIndex + 1);
+                        while (glyphData.textureIndex >= allocatedAreaPerTexture.size())
+                            allocatedAreaPerTexture.append(QRect(0, 0, 1, 1));
+
                         allocatedAreaPerTexture[glyphData.textureIndex] |= QRect(rect.x(),
                                                             rect.y() % textureSize,
                                                             rect.width(),
                                                             rect.height());
-
-                        allocatedArea |= rect;
 
                         glyphData.texCoord.xMargin = QT_DISTANCEFIELD_RADIUS(m_model->doubleGlyphResolution()) / qreal(QT_DISTANCEFIELD_SCALE(m_model->doubleGlyphResolution()));
                         glyphData.texCoord.yMargin = QT_DISTANCEFIELD_RADIUS(m_model->doubleGlyphResolution()) / qreal(QT_DISTANCEFIELD_SCALE(m_model->doubleGlyphResolution()));
@@ -508,7 +516,7 @@ QByteArray MainWindow::createSfntTable()
             }
         }
 
-        QVector<QDistanceField> textures;
+        QList<QDistanceField> textures;
         textures.resize(textureCount);
 
         for (int textureIndex = 0; textureIndex < textureCount; ++textureIndex) {
@@ -546,7 +554,7 @@ QByteArray MainWindow::createSfntTable()
                 glyphRecord.boundingRectY = qToBigEndian(TO_FIXED_POINT(glyphData.boundingRect.y()));
                 glyphRecord.boundingRectWidth = qToBigEndian(TO_FIXED_POINT(glyphData.boundingRect.width()));
                 glyphRecord.boundingRectHeight = qToBigEndian(TO_FIXED_POINT(glyphData.boundingRect.height()));
-                glyphRecord.textureIndex = qToBigEndian(glyphData.textureIndex);
+                glyphRecord.textureIndex = qToBigEndian(quint16(glyphData.textureIndex));
                 buffer.write(reinterpret_cast<char *>(&glyphRecord), sizeof(QtdfGlyphRecord));
 
                 int expectedWidth = qCeil(glyphData.texCoord.width + glyphData.texCoord.xMargin * 2);
@@ -688,17 +696,24 @@ void MainWindow::updateUnicodeRanges()
                this,
                &MainWindow::updateSelection);
 
+    QItemSelection selectedItems;
+
     for (int i = 0; i < ui->lwUnicodeRanges->count(); ++i) {
         QListWidgetItem *item = ui->lwUnicodeRanges->item(i);
-        DistanceFieldModel::UnicodeRange unicodeRange = item->data(Qt::UserRole).value<DistanceFieldModel::UnicodeRange>();
-        QList<glyph_t> glyphIndexes = m_model->glyphIndexesForUnicodeRange(unicodeRange);
-        for (glyph_t glyphIndex : glyphIndexes) {
-            QModelIndex index = m_model->index(glyphIndex);
-            ui->lvGlyphs->selectionModel()->select(index, item->isSelected()
-                                                            ? QItemSelectionModel::Select
-                                                            : QItemSelectionModel::Deselect);
+        if (item->isSelected()) {
+            DistanceFieldModel::UnicodeRange unicodeRange = item->data(Qt::UserRole).value<DistanceFieldModel::UnicodeRange>();
+            QList<glyph_t> glyphIndexes = m_model->glyphIndexesForUnicodeRange(unicodeRange);
+
+            for (glyph_t glyphIndex : glyphIndexes) {
+                QModelIndex index = m_model->index(glyphIndex);
+                selectedItems.select(index, index);
+            }
         }
     }
+
+    ui->lvGlyphs->selectionModel()->clearSelection();
+    if (!selectedItems.isEmpty())
+        ui->lvGlyphs->selectionModel()->select(selectedItems, QItemSelectionModel::Select);
 
     connect(ui->lvGlyphs->selectionModel(),
             &QItemSelectionModel::selectionChanged,
@@ -734,7 +749,7 @@ void MainWindow::selectString()
                                       tr("Select glyphs for string"),
                                       tr("String to parse:"));
     if (!s.isEmpty()) {
-        QVector<uint> ucs4String = s.toUcs4();
+        QList<uint> ucs4String = s.toUcs4();
         for (uint ucs4 : ucs4String) {
             glyph_t glyph = m_model->glyphIndexForUcs4(ucs4);
             if (glyph != 0) {

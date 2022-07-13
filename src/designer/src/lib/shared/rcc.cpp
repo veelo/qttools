@@ -38,7 +38,6 @@
 #include <QtCore/qfile.h>
 #include <QtCore/qiodevice.h>
 #include <QtCore/qlocale.h>
-#include <QtCore/qregexp.h>
 #include <QtCore/qstack.h>
 #include <QtCore/qxmlstream.h>
 
@@ -589,7 +588,7 @@ bool RCCResourceLibrary::addFile(const QString &alias, const RCCFileInfo &file)
             parent->m_children.insert(node, s);
             parent = s;
         } else {
-            parent = parent->m_children[node];
+            parent = *parent->m_children.constFind(node);
         }
     }
 
@@ -602,7 +601,7 @@ bool RCCResourceLibrary::addFile(const QString &alias, const RCCFileInfo &file)
                      qPrintable(fileName), qPrintable(filename));
         }
     }
-    parent->m_children.insertMulti(filename, s);
+    parent->m_children.insert(filename, s);
     return true;
 }
 
@@ -895,12 +894,11 @@ bool RCCResourceLibrary::writeDataStructure()
         file->m_childOffset = offset;
 
         //sort by hash value for binary lookup
-        QList<RCCFileInfo*> m_children = file->m_children.values();
-        std::sort(m_children.begin(), m_children.end(), qt_rcc_compare_hash);
+        auto children = file->m_children.values();
+        std::sort(children.begin(), children.end(), qt_rcc_compare_hash);
 
         //write out the actual data now
-        for (int i = 0; i < m_children.size(); ++i) {
-            RCCFileInfo *child = m_children.at(i);
+        for (RCCFileInfo *child : children) {
             ++offset;
             if (child->m_flags & RCCFileInfo::Directory)
                 pending.push(child);
@@ -914,12 +912,11 @@ bool RCCResourceLibrary::writeDataStructure()
         RCCFileInfo *file = pending.pop();
 
         //sort by hash value for binary lookup
-        QList<RCCFileInfo*> m_children = file->m_children.values();
-        std::sort(m_children.begin(), m_children.end(), qt_rcc_compare_hash);
+        auto children = file->m_children.values();
+        std::sort(children.begin(), children.end(), qt_rcc_compare_hash);
 
         //write out the actual data now
-        for (int i = 0; i < m_children.size(); ++i) {
-            RCCFileInfo *child = m_children.at(i);
+        for (RCCFileInfo *child : children) {
             child->writeDataInfo(*this);
             if (child->m_flags & RCCFileInfo::Directory)
                 pending.push(child);
@@ -953,6 +950,16 @@ void RCCResourceLibrary::writeAddNamespaceFunction(const QByteArray &name)
     }
 }
 
+static bool unacceptableChar(QChar qc)
+{
+    if (qc.isDigit())
+        return false;
+    if (!qc.isLetter())
+        return true;
+    auto c = qc.toLower().toLatin1();
+    return c < 'a' || c > 'z';
+}
+
 bool RCCResourceLibrary::writeInitializer()
 {
     if (m_format == C_Code) {
@@ -960,7 +967,8 @@ bool RCCResourceLibrary::writeInitializer()
         QString initName = m_initName;
         if (!initName.isEmpty()) {
             initName.prepend(QLatin1Char('_'));
-            initName.replace(QRegExp(QLatin1String("[^a-zA-Z0-9_]")), QLatin1String("_"));
+            std::replace_if(initName.begin(), initName.end(),
+                            unacceptableChar, QLatin1Char('_'));
         }
 
         //init

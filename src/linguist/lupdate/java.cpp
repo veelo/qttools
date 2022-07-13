@@ -32,11 +32,9 @@
 
 #include <QtCore/QDebug>
 #include <QtCore/QFile>
-#include <QtCore/QRegExp>
 #include <QtCore/QStack>
 #include <QtCore/QStack>
 #include <QtCore/QString>
-#include <QtCore/QTextCodec>
 #include <QtCore/QCoreApplication>
 
 #include <iostream>
@@ -44,10 +42,6 @@
 #include <ctype.h>
 
 QT_BEGIN_NAMESPACE
-
-class LU {
-    Q_DECLARE_TR_FUNCTIONS(LUpdate)
-};
 
 enum { Tok_Eof, Tok_class, Tok_return, Tok_tr,
        Tok_translate, Tok_Ident, Tok_Package,
@@ -83,7 +77,7 @@ static QChar yyCh;
 static QString yyIdent;
 static QString yyComment;
 static QString yyString;
-
+static bool yyEOF = false;
 
 static qlonglong yyInteger;
 static int yyParenDepth;
@@ -107,12 +101,14 @@ std::ostream &yyMsg(int line = 0)
 
 static QChar getChar()
 {
-    if (yyInPos >= yyInStr.size())
-        return EOF;
+    if (yyInPos >= yyInStr.size()) {
+        yyEOF = true;
+        return QChar();
+    }
     QChar c = yyInStr[yyInPos++];
-    if (c.unicode() == '\n')
+    if (c == QLatin1Char('\n'))
         ++yyCurLineNo;
-    return c.unicode();
+    return c;
 }
 
 static int getToken()
@@ -124,7 +120,7 @@ static int getToken()
     yyComment.clear();
     yyString.clear();
 
-    while ( yyCh != EOF ) {
+    while (!yyEOF) {
         yyLineNo = yyCurLineNo;
 
         if ( yyCh.isLetter() || yyCh.toLatin1() == '_' ) {
@@ -169,7 +165,7 @@ static int getToken()
                 if ( yyCh == QLatin1Char('/') ) {
                     do {
                         yyCh = getChar();
-                        if (yyCh == EOF)
+                        if (yyEOF)
                             break;
                         yyComment.append(yyCh);
                     } while (yyCh != QLatin1Char('\n'));
@@ -181,7 +177,7 @@ static int getToken()
 
                     while ( !metAsterSlash ) {
                         yyCh = getChar();
-                        if ( yyCh == EOF ) {
+                        if (yyEOF) {
                             yyMsg() << qPrintable(LU::tr("Unterminated Java comment.\n"));
                             return Tok_Comment;
                         }
@@ -204,7 +200,8 @@ static int getToken()
             case '"':
                 yyCh = getChar();
 
-                while ( yyCh != EOF && yyCh != QLatin1Char('\n') && yyCh != QLatin1Char('"') ) {
+                while (!yyEOF && yyCh != QLatin1Char('\n') && yyCh != QLatin1Char('"')) {
+
                     if ( yyCh == QLatin1Char('\\') ) {
                         yyCh = getChar();
                         if ( yyCh == QLatin1Char('u') ) {
@@ -257,7 +254,7 @@ static int getToken()
                     yyCh = getChar();
                 do {
                     yyCh = getChar();
-                } while ( yyCh != EOF && yyCh != QLatin1Char('\'') );
+                } while (!yyEOF && yyCh != QLatin1Char('\''));
                 yyCh = getChar();
                 break;
             case '{':
@@ -453,6 +450,7 @@ static void parse(Translator *tor, ConversionData &cd)
     QString com;
     QString extracomment;
 
+    yyEOF = false;
     yyCh = getChar();
 
     yyTok = getToken();
@@ -602,7 +600,7 @@ bool loadJava(Translator &translator, const QString &filename, ConversionData &c
     yyParenLineNo = 1;
 
     QTextStream ts(&file);
-    ts.setCodec(QTextCodec::codecForName(cd.m_sourceIsUtf16 ? "UTF-16" : "UTF-8"));
+    ts.setEncoding(cd.m_sourceIsUtf16 ? QStringConverter::Utf16 : QStringConverter::Utf8);
     ts.setAutoDetectUnicode(true);
     yyInStr = ts.readAll();
     yyInPos = 0;

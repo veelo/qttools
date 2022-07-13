@@ -49,13 +49,16 @@
 #include <QWebSettings>
 #endif
 
+#if defined(BROWSER_QTWEBENGINE)
+#include <QWebEngineUrlScheme>
+#endif
+
 #include "../shared/collectionconfiguration.h"
 #include "helpenginewrapper.h"
 #include "mainwindow.h"
 #include "cmdlineparser.h"
 
 // #define TRACING_REQUESTED
-// #define DEBUG_TRANSLATIONS
 
 QT_USE_NAMESPACE
 
@@ -241,35 +244,127 @@ bool unregisterDocumentation(QHelpEngineCore &collection,
 void setupTranslation(const QString &fileName, const QString &dir)
 {
     QTranslator *translator = new QTranslator(QCoreApplication::instance());
-    if (translator->load(fileName, dir))
+    if (translator->load(QLocale(), fileName, QLatin1String("_"), dir))
         QCoreApplication::installTranslator(translator);
-#ifdef DEBUG_TRANSLATIONS
-    else if (!fileName.endsWith(QLatin1String("en_US"))
-             && !fileName.endsWith(QLatin1String("_C"))) {
-        qDebug("Could not load translation file %s in directory %s.",
-               qPrintable(fileName), qPrintable(dir));
-    }
-#endif
 }
 
 void setupTranslations()
 {
     TRACE_OBJ
-    const QString& locale = QLocale::system().name();
     const QString &resourceDir
-        = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
-    setupTranslation(QLatin1String("assistant_") + locale, resourceDir);
-    setupTranslation(QLatin1String("qt_") + locale, resourceDir);
-    setupTranslation(QLatin1String("qt_help_") + locale, resourceDir);
+        = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
+    setupTranslation(QLatin1String("assistant"), resourceDir);
+    setupTranslation(QLatin1String("qt"), resourceDir);
+    setupTranslation(QLatin1String("qt_help"), resourceDir);
 }
 
 } // Anonymous namespace.
 
+enum ExitStatus {
+    ExitSuccess = 0,
+    ExitFailure,
+    NoExit
+};
+
+static ExitStatus preliminarySetup(CmdLineParser *cmd)
+{
+    /*
+     * Create the collection objects that we need. We always have the
+     * cached collection file. Depending on whether the user specified
+     * one, we also may have an input collection file.
+     */
+    const QString collectionFile = cmd->collectionFile();
+    const bool collectionFileGiven = !collectionFile.isEmpty();
+    QScopedPointer<QHelpEngineCore> collection;
+    if (collectionFileGiven) {
+        collection.reset(new QHelpEngineCore(collectionFile));
+        if (!collection->setupData()) {
+            cmd->showMessage(QCoreApplication::translate("Assistant",
+                             "Error reading collection file '%1': %2.")
+                            .arg(collectionFile).arg(collection->error()), true);
+            return ExitFailure;
+        }
+    }
+    const QString &cachedCollectionFile = collectionFileGiven
+            ? constructCachedCollectionFilePath(*collection)
+            : MainWindow::defaultHelpCollectionFileName();
+    if (collectionFileGiven && !QFileInfo(cachedCollectionFile).exists()
+            && !collection->copyCollectionFile(cachedCollectionFile)) {
+        cmd->showMessage(QCoreApplication::translate("Assistant",
+                         "Error creating collection file '%1': %2.")
+                        .arg(cachedCollectionFile).arg(collection->error()), true);
+        return ExitFailure;
+    }
+    QHelpEngineCore cachedCollection(cachedCollectionFile);
+    if (!cachedCollection.setupData()) {
+        cmd->showMessage(QCoreApplication::translate("Assistant",
+                         "Error reading collection file '%1': %2.")
+                        .arg(cachedCollectionFile)
+                        .arg(cachedCollection.error()), true);
+        return ExitFailure;
+    }
+
+    stripNonexistingDocs(cachedCollection);
+    if (collectionFileGiven) {
+        if (CollectionConfiguration::isNewer(*collection, cachedCollection))
+            CollectionConfiguration::copyConfiguration(*collection,
+                                                       cachedCollection);
+        if (!synchronizeDocs(*collection, cachedCollection, *cmd))
+            return ExitFailure;
+    }
+
+    if (cmd->registerRequest() != CmdLineParser::None) {
+        const QStringList &cachedDocs =
+                cachedCollection.registeredDocumentations();
+        const QString &namespaceName =
+                QHelpEngineCore::namespaceName(cmd->helpFile());
+        if (cmd->registerRequest() == CmdLineParser::Register) {
+            if (collectionFileGiven
+                    && !registerDocumentation(*collection, *cmd, true))
+                return ExitFailure;
+            if (!cachedDocs.contains(namespaceName)
+                    && !registerDocumentation(cachedCollection, *cmd, !collectionFileGiven))
+                return ExitFailure;
+            return ExitSuccess;
+        }
+        if (cmd->registerRequest() == CmdLineParser::Unregister) {
+            if (collectionFileGiven
+                    && !unregisterDocumentation(*collection, namespaceName, *cmd, true))
+                return ExitFailure;
+            if (cachedDocs.contains(namespaceName)
+                    && !unregisterDocumentation(cachedCollection, namespaceName,
+                                                *cmd, !collectionFileGiven))
+                return ExitFailure;
+            return ExitSuccess;
+        }
+    }
+
+    if (cmd->removeSearchIndex()) {
+        return removeSearchIndex(cachedCollectionFile)
+                ? ExitSuccess : ExitFailure;
+    }
+
+    if (!QSqlDatabase::isDriverAvailable(QLatin1String("QSQLITE"))) {
+        cmd->showMessage(QCoreApplication::translate("Assistant",
+                         "Cannot load sqlite database driver!"),
+                         true);
+        return ExitFailure;
+    }
+
+    if (!cmd->currentFilter().isEmpty()) {
+        if (collectionFileGiven)
+            collection->setCurrentFilter(cmd->currentFilter());
+        cachedCollection.setCurrentFilter(cmd->currentFilter());
+    }
+
+    if (collectionFileGiven)
+        cmd->setCollectionFile(cachedCollectionFile);
+
+    return NoExit;
+}
+
 int main(int argc, char *argv[])
 {
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
-    QCoreApplication::setAttribute(Qt::AA_DisableWindowContextHelpButton);
     TRACE_OBJ
     QScopedPointer<QCoreApplication> a(createApplication(argc, argv));
 #if QT_CONFIG(library)
@@ -285,6 +380,13 @@ int main(int argc, char *argv[])
     }
 #endif // BROWSER_QTWEBKIT
 
+#if defined(BROWSER_QTWEBENGINE)
+    QWebEngineUrlScheme scheme(QByteArrayLiteral("qthelp"));
+    scheme.setSyntax(QWebEngineUrlScheme::Syntax::Path);
+    scheme.setFlags(QWebEngineUrlScheme::SecureScheme);
+    QWebEngineUrlScheme::registerScheme(scheme);
+#endif // BROWSER_QTWEBENGINE
+
     // Parse arguments.
     CmdLineParser cmd(a->arguments());
     CmdLineParser::Result res = cmd.parse();
@@ -293,98 +395,12 @@ int main(int argc, char *argv[])
     else if (res == CmdLineParser::Error)
         return -1;
 
-    /*
-     * Create the collection objects that we need. We always have the
-     * cached collection file. Depending on whether the user specified
-     * one, we also may have an input collection file.
-     */
-    const QString collectionFile = cmd.collectionFile();
-    const bool collectionFileGiven = !collectionFile.isEmpty();
-    QScopedPointer<QHelpEngineCore> collection;
-    if (collectionFileGiven) {
-        collection.reset(new QHelpEngineCore(collectionFile));
-        collection->setProperty("_q_readonly", QVariant::fromValue<bool>(true));
-        if (!collection->setupData()) {
-            cmd.showMessage(QCoreApplication::translate("Assistant",
-                                "Error reading collection file '%1': %2.").
-                arg(collectionFile).arg(collection->error()), true);
-            return EXIT_FAILURE;
-        }
+    const ExitStatus status = preliminarySetup(&cmd);
+    switch (status) {
+        case ExitFailure: return EXIT_FAILURE;
+        case ExitSuccess: return EXIT_SUCCESS;
+        default: break;
     }
-    const QString &cachedCollectionFile = collectionFileGiven
-        ? constructCachedCollectionFilePath(*collection)
-        : MainWindow::defaultHelpCollectionFileName();
-    if (collectionFileGiven && !QFileInfo(cachedCollectionFile).exists()
-        && !collection->copyCollectionFile(cachedCollectionFile)) {
-        cmd.showMessage(QCoreApplication::translate("Assistant",
-                            "Error creating collection file '%1': %2.").
-                arg(cachedCollectionFile).arg(collection->error()), true);
-        return EXIT_FAILURE;
-    }
-    QHelpEngineCore cachedCollection(cachedCollectionFile);
-    if (!cachedCollection.setupData()) {
-        cmd.showMessage(QCoreApplication::translate("Assistant",
-                            "Error reading collection file '%1': %2.").
-                        arg(cachedCollectionFile).
-                        arg(cachedCollection.error()), true);
-        return EXIT_FAILURE;
-    }
-
-    stripNonexistingDocs(cachedCollection);
-    if (collectionFileGiven) {
-        if (CollectionConfiguration::isNewer(*collection, cachedCollection))
-            CollectionConfiguration::copyConfiguration(*collection,
-                                                       cachedCollection);
-        if (!synchronizeDocs(*collection, cachedCollection, cmd))
-            return EXIT_FAILURE;
-    }
-
-    if (cmd.registerRequest() != CmdLineParser::None) {
-        const QStringList &cachedDocs =
-            cachedCollection.registeredDocumentations();
-        const QString &namespaceName =
-            QHelpEngineCore::namespaceName(cmd.helpFile());
-        if (cmd.registerRequest() == CmdLineParser::Register) {
-            if (collectionFileGiven
-                && !registerDocumentation(*collection, cmd, true))
-                return EXIT_FAILURE;
-            if (!cachedDocs.contains(namespaceName)
-                && !registerDocumentation(cachedCollection, cmd, !collectionFileGiven))
-                return EXIT_FAILURE;
-            return EXIT_SUCCESS;
-        }
-        if (cmd.registerRequest() == CmdLineParser::Unregister) {
-            if (collectionFileGiven
-                && !unregisterDocumentation(*collection, namespaceName, cmd, true))
-                return EXIT_FAILURE;
-            if (cachedDocs.contains(namespaceName)
-                && !unregisterDocumentation(cachedCollection, namespaceName,
-                                            cmd, !collectionFileGiven))
-                return EXIT_FAILURE;
-            return EXIT_SUCCESS;
-        }
-    }
-
-    if (cmd.removeSearchIndex()) {
-        return removeSearchIndex(cachedCollectionFile)
-            ? EXIT_SUCCESS : EXIT_FAILURE;
-    }
-
-    if (!QSqlDatabase::isDriverAvailable(QLatin1String("QSQLITE"))) {
-        cmd.showMessage(QCoreApplication::translate("Assistant",
-                            "Cannot load sqlite database driver!"),
-                        true);
-        return EXIT_FAILURE;
-    }
-
-    if (!cmd.currentFilter().isEmpty()) {
-        if (collectionFileGiven)
-            collection->setCurrentFilter(cmd.currentFilter());
-        cachedCollection.setCurrentFilter(cmd.currentFilter());
-    }
-
-    if (collectionFileGiven)
-        cmd.setCollectionFile(cachedCollectionFile);
 
     MainWindow *w = new MainWindow(&cmd);
     w->show();

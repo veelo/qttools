@@ -60,8 +60,6 @@
 #include <QtDesigner/abstractintegration.h>
 #include <QtDesigner/qextensionmanager.h>
 
-#include <QtWidgets/qaction.h>
-#include <QtWidgets/qactiongroup.h>
 #include <QtWidgets/qwidget.h>
 #include <QtWidgets/qmenubar.h>
 #include <QtWidgets/qmainwindow.h>
@@ -69,7 +67,11 @@
 #include <QtWidgets/qdialogbuttonbox.h>
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qpushbutton.h>
-#include <QtWidgets/qundostack.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qactiongroup.h>
+#include <QtGui/qundostack.h>
+
 #include <QtCore/qdebug.h>
 #include <QtCore/qcoreapplication.h>
 
@@ -250,7 +252,7 @@ bool LayoutAlignmentMenu::setAlignment(const QDesignerFormEditorInterface *core,
 
 Qt::Alignment LayoutAlignmentMenu::alignment() const
 {
-    Qt::Alignment alignment = nullptr;
+    Qt::Alignment alignment;
     if (const QAction *horizAction = m_horizGroup->checkedAction())
         if (const int horizAlign = horizAction->data().toInt())
             alignment |= static_cast<Qt::Alignment>(horizAlign);

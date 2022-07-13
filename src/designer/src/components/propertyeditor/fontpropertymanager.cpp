@@ -79,14 +79,14 @@ namespace qdesigner_internal {
             resetMap[property] = true;
         }
 
-        if (type == QVariant::Font)
+        if (type == QMetaType::QFont)
             m_createdFontProperty = property;
     }
 
     // Map the font family names to display names retrieved from the XML configuration
     static QStringList designerFamilyNames(QStringList families, const FontPropertyManager::NameMap &nm)
     {
-        if (nm.empty())
+        if (nm.isEmpty())
             return families;
 
         const auto ncend = nm.constEnd();
@@ -103,7 +103,7 @@ namespace qdesigner_internal {
                                                      int type,
                                                      int enumTypeId)
     {
-        if (type != QVariant::Font)
+        if (type != QMetaType::QFont)
             return;
 
         // This will cause a recursion
@@ -117,9 +117,9 @@ namespace qdesigner_internal {
         m_propertyToAntialiasing[property] = antialiasing;
         m_antialiasingToProperty[antialiasing] = property;
         // Fiddle family names
-        if (!m_familyMappings.empty()) {
+        if (!m_familyMappings.isEmpty()) {
             const PropertyToSubPropertiesMap::iterator it = m_propertyToFontSubProperties.find(m_createdFontProperty);
-            QtVariantProperty *familyProperty = vm->variantProperty(it.value().front());
+            QtVariantProperty *familyProperty = vm->variantProperty(it.value().constFirst());
             const QString enumNamesAttribute = QStringLiteral("enumNames");
             QStringList plainFamilyNames = familyProperty->attributeValue(enumNamesAttribute).toStringList();
             // Did someone load fonts or something?
@@ -176,11 +176,11 @@ namespace qdesigner_internal {
 
         QVariant v = fontProperty->value();
         QFont font = qvariant_cast<QFont>(v);
-        unsigned mask = font.resolve();
+        unsigned mask = font.resolveMask();
         const unsigned flag = fontFlag(m_fontSubPropertyToFlag.value(property));
 
         mask &= ~flag;
-        font.resolve(mask);
+        font.setResolveMask(mask);
         v.setValue(font);
         fontProperty->setValue(v);
         return true;
@@ -254,7 +254,7 @@ namespace qdesigner_internal {
         const PropertyList &subProperties = it.value();
 
         QFont font = qvariant_cast<QFont>(value);
-        const unsigned mask = font.resolve();
+        const unsigned mask = font.resolveMask();
 
         const int count = subProperties.size();
         for (int index = 0; index < count; index++) {
@@ -295,7 +295,7 @@ namespace qdesigner_internal {
     enum ParseStage { ParseBeginning, ParseWithinRoot, ParseWithinMapping, ParseWithinFamily,
                       ParseWithinDisplay, ParseError };
 
-    static ParseStage nextStage(ParseStage currentStage, const QStringRef &startElement)
+    static ParseStage nextStage(ParseStage currentStage, QStringView startElement)
     {
         switch (currentStage) {
         case ParseBeginning:

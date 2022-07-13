@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2019 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -28,27 +28,24 @@
 
 #ifndef QDOCCOMMANDLINEPARSER_H
 #define QDOCCOMMANDLINEPARSER_H
+
 #include <QtCore/qcommandlineparser.h>
-#include "qdocglobals.h"
 
 QT_BEGIN_NAMESPACE
 
-class QDocCommandLineParser : public QCommandLineParser
+struct QDocCommandLineParser : public QCommandLineParser
 {
-public:
     QDocCommandLineParser();
-    void process(const QCoreApplication &app, QDocGlobals &qdocGlobals);
+    void process(const QStringList &arguments);
 
-private:
     QCommandLineOption defineOption, dependsOption, highlightingOption;
     QCommandLineOption showInternalOption, redirectDocumentationToDevNullOption;
     QCommandLineOption noExamplesOption, indexDirOption, installDirOption;
-    QCommandLineOption obsoleteLinksOption, outputDirOption, outputFormatOption;
+    QCommandLineOption outputDirOption, outputFormatOption;
     QCommandLineOption noLinkErrorsOption, autoLinkErrorsOption, debugOption;
-    QCommandLineOption prepareOption, generateOption, logProgressOption;
-    QCommandLineOption singleExecOption, writeQaPagesOption;
+    QCommandLineOption prepareOption, generateOption, logProgressOption, singleExecOption;
     QCommandLineOption includePathOption, includePathSystemOption, frameworkOption;
-    QCommandLineOption timestampsOption;
+    QCommandLineOption timestampsOption, useDocBookExtensions;
 };
 
 QT_END_NAMESPACE

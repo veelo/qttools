@@ -70,6 +70,12 @@ bool QAxWidgetPropertySheet::isEnabled(int index) const
     return QDesignerPropertySheet::isEnabled(index);
 }
 
+bool QAxWidgetPropertySheet::isVisible(int index) const
+{
+    // classContext is ulong, which the property editor does not support
+    return propertyName(index) != QLatin1String("classContext");
+}
+
 bool QAxWidgetPropertySheet::dynamicPropertiesAllowed() const
 {
     return false;
@@ -130,7 +136,7 @@ int QAxWidgetPropertySheet::indexOf(const QString &name) const
         return index;
     // Loading before recreation of sheet in timer slot: Add a fake property to store the value
     const QVariant dummValue(0);
-    QAxWidgetPropertySheet *that = const_cast<QAxWidgetPropertySheet *>(this);
+    auto that = const_cast<QAxWidgetPropertySheet *>(this);
     const int newIndex = that->createFakeProperty(name, dummValue);
     that->setPropertyGroup(newIndex, m_propertyGroup);
     return newIndex;
@@ -142,7 +148,7 @@ void QAxWidgetPropertySheet::updatePropertySheet()
     struct SavedProperties tmp = m_currentProperties;
     QDesignerAxWidget *axw = axWidget();
     QDesignerFormWindowInterface *formWin = QDesignerFormWindowInterface::findFormWindow(axw);
-    Q_ASSERT(formWin != 0);
+    Q_ASSERT(formWin != nullptr);
     tmp.widget = axw;
     tmp.clsid = axw->control();
     // Delete the sheets as they cache the meta object and other information
@@ -151,16 +157,18 @@ void QAxWidgetPropertySheet::updatePropertySheet()
     reloadPropertySheet(tmp, formWin);
 }
 
-void QAxWidgetPropertySheet::reloadPropertySheet(const struct SavedProperties &properties, QDesignerFormWindowInterface *formWin)
+void QAxWidgetPropertySheet::reloadPropertySheet(const struct SavedProperties &properties,
+                                                 QDesignerFormWindowInterface *formWin)
 {
     QDesignerFormEditorInterface *core = formWin->core();
     //Recreation of the property sheet
-    QDesignerPropertySheetExtension *sheet = qt_extension<QDesignerPropertySheetExtension *>(core->extensionManager(), properties.widget);
+    auto sheet = qt_extension<QDesignerPropertySheetExtension *>(core->extensionManager(),
+                                                                 properties.widget);
 
     bool foundGeometry = false;
     const QString geometryProperty = QLatin1String(geometryPropertyC);
-    const SavedProperties::NamePropertyMap::const_iterator cend = properties.changedProperties.constEnd();
-    for (SavedProperties::NamePropertyMap::const_iterator i = properties.changedProperties.constBegin(); i != cend; ++i) {
+    for (auto i = properties.changedProperties.cbegin(), cend = properties.changedProperties.cend();
+         i != cend; ++i) {
         const QString name = i.key();
         const int index = sheet->indexOf(name);
         if (index == -1)

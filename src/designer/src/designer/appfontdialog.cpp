@@ -32,23 +32,24 @@
 
 #include <QtDesigner/abstractsettings.h>
 
-#include <QtWidgets/qtreeview.h>
-#include <QtWidgets/qtoolbutton.h>
-#include <QtWidgets/qboxlayout.h>
-#include <QtWidgets/qlayoutitem.h>
-#include <QtWidgets/qfiledialog.h>
-#include <QtGui/qstandarditemmodel.h>
-#include <QtWidgets/qmessagebox.h>
 #include <QtGui/qfontdatabase.h>
-#include <QtWidgets/qdialogbuttonbox.h>
+#include <QtGui/qstandarditemmodel.h>
 
-#include <QtCore/qsettings.h>
-#include <QtCore/qcoreapplication.h>
-#include <QtCore/qstringlist.h>
-#include <QtCore/qfileinfo.h>
+#include <QtWidgets/qboxlayout.h>
+#include <QtWidgets/qdialogbuttonbox.h>
+#include <QtWidgets/qfiledialog.h>
+#include <QtWidgets/qlayoutitem.h>
+#include <QtWidgets/qmessagebox.h>
+#include <QtWidgets/qtoolbutton.h>
+#include <QtWidgets/qtreeview.h>
+
 #include <QtCore/qalgorithms.h>
-#include <QtCore/qvector.h>
+#include <QtCore/qcoreapplication.h>
 #include <QtCore/qdebug.h>
+#include <QtCore/qfileinfo.h>
+#include <QtCore/qlist.h>
+#include <QtCore/qsettings.h>
+#include <QtCore/qstringlist.h>
 
 #include <algorithm>
 
@@ -122,7 +123,7 @@ void AppFontManager::restore(const QDesignerSettingsInterface *s, const QString 
 
     if (debugAppFontWidget)
         qDebug() << "AppFontManager::restoring" << fontFiles.size() << "fonts from " << prefix;
-    if (!fontFiles.empty()) {
+    if (!fontFiles.isEmpty()) {
         QString errorMessage;
         const QStringList::const_iterator cend = fontFiles.constEnd();
         for (QStringList::const_iterator it = fontFiles.constBegin(); it != cend; ++it)
@@ -311,7 +312,7 @@ void AppFontWidget::addFiles()
     const QStringList files =
         QFileDialog::getOpenFileNames(this, tr("Add Font Files"), QString(),
                                       tr("Font files (*.ttf)"));
-    if (files.empty())
+    if (files.isEmpty())
         return;
 
     QString errorMessage;
@@ -331,12 +332,12 @@ void AppFontWidget::addFiles()
 
 static void removeFonts(const QModelIndexList &selectedIndexes, AppFontModel *model, QWidget *dialogParent)
 {
-    if (selectedIndexes.empty())
+    if (selectedIndexes.isEmpty())
         return;
 
     // Reverse sort top level rows and remove
     AppFontManager &fmgr = AppFontManager::instance();
-    QVector<int> rows;
+    QList<int> rows;
     rows.reserve(selectedIndexes.size());
 
     QString errorMessage;
@@ -382,7 +383,7 @@ void AppFontWidget::slotRemoveAll()
 
 void AppFontWidget::selectionChanged(const QItemSelection &selected, const QItemSelection & /*deselected*/)
 {
-     m_removeButton->setEnabled(!selected.indexes().empty());
+     m_removeButton->setEnabled(!selected.indexes().isEmpty());
 }
 
 void AppFontWidget::save(QDesignerSettingsInterface *s, const QString &prefix)

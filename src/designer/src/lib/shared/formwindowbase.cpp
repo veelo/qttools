@@ -45,10 +45,6 @@
 #include <QtDesigner/taskmenu.h>
 #include <QtDesigner/abstractintegration.h>
 
-#include <QtCore/qdebug.h>
-#include <QtCore/qlist.h>
-#include <QtCore/qset.h>
-#include <QtCore/qtimer.h>
 #include <QtWidgets/qmenu.h>
 #include <QtWidgets/qlistwidget.h>
 #include <QtWidgets/qtreewidget.h>
@@ -59,8 +55,14 @@
 #include <QtWidgets/qtoolbar.h>
 #include <QtWidgets/qstatusbar.h>
 #include <QtWidgets/qmenu.h>
-#include <QtWidgets/qaction.h>
 #include <QtWidgets/qlabel.h>
+
+#include <QtGui/qaction.h>
+
+#include <QtCore/qdebug.h>
+#include <QtCore/qlist.h>
+#include <QtCore/qset.h>
+#include <QtCore/qtimer.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -84,6 +86,7 @@ public:
     FormWindowBase::LineTerminatorMode m_lineTerminatorMode;
     FormWindowBase::ResourceFileSaveMode m_saveResourcesBehaviour;
     bool m_useIdBasedTranslations;
+    bool m_connectSlotsByName;
 };
 
 FormWindowBasePrivate::FormWindowBasePrivate(QDesignerFormEditorInterface *core) :
@@ -96,7 +99,8 @@ FormWindowBasePrivate::FormWindowBasePrivate(QDesignerFormEditorInterface *core)
     m_deviceProfile(QDesignerSharedSettings(core).currentDeviceProfile()),
     m_lineTerminatorMode(FormWindowBase::NativeLineTerminator),
     m_saveResourcesBehaviour(FormWindowBase::SaveAllResourceFiles),
-    m_useIdBasedTranslations(false)
+    m_useIdBasedTranslations(false),
+    m_connectSlotsByName(true)
 {
 }
 
@@ -444,7 +448,7 @@ void FormWindowBase::deleteWidgetList(const QWidgetList &widget_list)
     // the signal slot editor are connected to widgetRemoved() and add their
     // own commands (for example, to delete w's connections)
     const QString description = widget_list.size() == 1 ?
-        tr("Delete '%1'").arg(widget_list.front()->objectName()) : tr("Delete");
+        tr("Delete '%1'").arg(widget_list.constFirst()->objectName()) : tr("Delete");
 
     commandHistory()->beginMacro(description);
     for (QWidget *w : qAsConst(widget_list)) {
@@ -465,16 +469,16 @@ QMenu *FormWindowBase::createExtensionTaskMenu(QDesignerFormWindowInterface *fw,
     if (const QDesignerTaskMenuExtension *extTaskMenu = qt_extension<QDesignerTaskMenuExtension*>(em, o))
         actions += extTaskMenu->taskActions();
     if (const QDesignerTaskMenuExtension *intTaskMenu = qobject_cast<QDesignerTaskMenuExtension *>(em->extension(o, QStringLiteral("QDesignerInternalTaskMenuExtension")))) {
-        if (!actions.empty()) {
+        if (!actions.isEmpty()) {
             QAction *a = new QAction(fw);
             a->setSeparator(true);
             actions.push_back(a);
         }
         actions += intTaskMenu->taskActions();
     }
-    if (actions.empty())
+    if (actions.isEmpty())
         return nullptr;
-    if (trailingSeparator && !actions.back()->isSeparator()) {
+    if (trailingSeparator && !actions.constLast()->isSeparator()) {
         QAction *a  = new QAction(fw);
         a->setSeparator(true);
         actions.push_back(a);
@@ -535,6 +539,16 @@ bool FormWindowBase::useIdBasedTranslations() const
 void FormWindowBase::setUseIdBasedTranslations(bool v)
 {
     m_d->m_useIdBasedTranslations = v;
+}
+
+bool FormWindowBase::connectSlotsByName() const
+{
+    return m_d->m_connectSlotsByName;
+}
+
+void FormWindowBase::setConnectSlotsByName(bool v)
+{
+    m_d->m_connectSlotsByName = v;
 }
 
 QStringList FormWindowBase::checkContents() const

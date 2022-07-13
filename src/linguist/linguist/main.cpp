@@ -32,13 +32,10 @@
 #include <QtCore/QFile>
 #include <QtCore/QLibraryInfo>
 #include <QtCore/QLocale>
-#include <QtCore/QSettings>
 #include <QtCore/QTranslator>
 
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QDesktopWidget>
 #include <QtGui/QPixmap>
-#include <QtWidgets/QSplashScreen>
 
 #ifdef Q_OS_MAC
 #include <QtCore/QUrl>
@@ -68,7 +65,7 @@ public:
     }
 
 protected:
-    bool eventFilter(QObject *object, QEvent *event)
+    bool eventFilter(QObject *object, QEvent *event) override
     {
         if (object == qApp && event->type() == QEvent::FileOpen) {
             QFileOpenEvent *e = static_cast<QFileOpenEvent*>(event);
@@ -92,9 +89,6 @@ int main(int argc, char **argv)
 {
     Q_INIT_RESOURCE(linguist);
 
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
-
     QApplication app(argc, argv);
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
@@ -104,7 +98,7 @@ int main(int argc, char **argv)
 #endif // Q_OS_MAC
 
     QStringList files;
-    QString resourceDir = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
+    QString resourceDir = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
     QStringList args = app.arguments();
 
     for (int i = 1; i < args.count(); ++i) {
@@ -122,10 +116,9 @@ int main(int argc, char **argv)
 
     QTranslator translator;
     QTranslator qtTranslator;
-    QString sysLocale = QLocale::system().name();
-    if (translator.load(QLatin1String("linguist_") + sysLocale, resourceDir)) {
+    if (translator.load(QLocale(), QLatin1String("linguist"), QLatin1String("_"), resourceDir)) {
         app.installTranslator(&translator);
-        if (qtTranslator.load(QLatin1String("qt_") + sysLocale, resourceDir))
+        if (qtTranslator.load(QLocale(), QLatin1String("qt"), QLatin1String("_"), resourceDir))
             app.installTranslator(&qtTranslator);
         else
             app.removeTranslator(&translator);
@@ -134,28 +127,11 @@ int main(int argc, char **argv)
     app.setOrganizationName(QLatin1String("QtProject"));
     app.setApplicationName(QLatin1String("Linguist"));
 
-    QSettings config;
-
-    QWidget tmp;
-    tmp.restoreGeometry(config.value(settingPath("Geometry/WindowGeometry")).toByteArray());
-
-    QSplashScreen *splash = 0;
-    int screenId = QApplication::desktop()->screenNumber(tmp.geometry().center());
-    splash = new QSplashScreen(QApplication::desktop()->screen(screenId),
-        QPixmap(QLatin1String(":/images/icons/linguist-128-32.png")));
-    if (QApplication::desktop()->isVirtualDesktop()) {
-        QRect srect(0, 0, splash->width(), splash->height());
-        splash->move(QApplication::desktop()->availableGeometry(screenId).center() - srect.center());
-    }
-    splash->setAttribute(Qt::WA_DeleteOnClose);
-    splash->show();
-
     MainWindow mw;
 #ifdef Q_OS_MAC
     eventFilter.setMainWindow(&mw);
 #endif // Q_OS_MAC
     mw.show();
-    splash->finish(&mw);
     QApplication::restoreOverrideCursor();
 
     mw.openFiles(files, true);

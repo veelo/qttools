@@ -29,6 +29,7 @@
     \module QtDesigner
     \title Qt Designer C++ Classes
     \ingroup modules
+    \qtcmakepackage Designer
     \qtvariable designer
 
     \brief Provides classes to create your own custom widget plugins for
@@ -45,4 +46,9 @@
     To link against the module, add this line to your \c qmake .pro file:
 
     \snippet plugins/doc_src_qtdesigner.pro 1
+*/
+
+/*!
+    \namespace qdesigner_internal
+    \internal
 */

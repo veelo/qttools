@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2019 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -29,22 +29,23 @@
 #ifndef WEBXMLGENERATOR_H
 #define WEBXMLGENERATOR_H
 
-#include <QtCore/qxmlstream.h>
-
 #include "codemarker.h"
-#include "config.h"
 #include "htmlgenerator.h"
 #include "qdocindexfiles.h"
 
+#include <QtCore/qscopedpointer.h>
+#include <QtCore/qxmlstream.h>
+
 QT_BEGIN_NAMESPACE
+
+class Aggregate;
 
 class WebXMLGenerator : public HtmlGenerator, public IndexSectionWriter
 {
 public:
-    explicit WebXMLGenerator() {}
-    ~WebXMLGenerator() {}
+    WebXMLGenerator() = default;
 
-    void initializeGenerator(const Config &config) override;
+    void initializeGenerator() override;
     void terminateGenerator() override;
     QString format() override;
     // from IndexSectionWriter
@@ -55,29 +56,30 @@ protected:
     void generateCppReferencePage(Aggregate *aggregate, CodeMarker *marker) override;
     void generatePageNode(PageNode *pn, CodeMarker *marker) override;
     void generateDocumentation(Node *node) override;
+    void generateExampleFilePage(const Node *en, const QString &file, CodeMarker *marker) override;
     QString fileExtension() const override;
 
     virtual const Atom *addAtomElements(QXmlStreamWriter &writer, const Atom *atom,
-                                 const Node *relative, CodeMarker *marker);
+                                        const Node *relative, CodeMarker *marker);
     virtual void generateIndexSections(QXmlStreamWriter &writer, Node *node);
 
-
 private:
-    const QPair<QString,QString> anchorForNode(const Node *node);
-    void generateAnnotatedList(QXmlStreamWriter &writer, const Node *relative, const NodeMap &nodeMap);
-    void generateFullName(QXmlStreamWriter &writer, const Node *node,
-                          const Node *relative);
+    void generateAnnotatedList(QXmlStreamWriter &writer, const Node *relative,
+                               const NodeMap &nodeMap);
+    void generateAnnotatedList(QXmlStreamWriter &writer, const Node *relative,
+                               const NodeList &nodeList);
     void generateRelations(QXmlStreamWriter &writer, const Node *node);
     void startLink(QXmlStreamWriter &writer, const Atom *atom, const Node *node,
                    const QString &link);
-    QString targetType(const Node *node);
+    void endLink(QXmlStreamWriter &writer);
+    QString fileBase(const Node *node) const override;
 
-    bool inLink;
-    bool inContents;
-    bool inSectionHeading;
-    bool hasQuotingInformation;
-    int numTableRows;
-    QString quoteCommand;
+    bool m_inLink { false };
+    bool m_inSectionHeading { false };
+    bool m_hasQuotingInformation { false };
+    QString quoteCommand {};
+    QScopedPointer<QXmlStreamWriter> currentWriter {};
+    bool m_supplement { false };
 };
 
 QT_END_NAMESPACE

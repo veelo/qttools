@@ -40,7 +40,6 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
-#include <QtCore/QRegExp>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtCore/QTextStream>
@@ -165,7 +164,7 @@ static bool releaseTsFile(const QString& tsFileName,
         return false;
 
     QString qmFileName = tsFileName;
-    foreach (const Translator::FileFormat &fmt, Translator::registeredFileFormats()) {
+    for (const Translator::FileFormat &fmt : qAsConst(Translator::registeredFileFormats())) {
         if (qmFileName.endsWith(QLatin1Char('.') + fmt.extension)) {
             qmFileName.chop(fmt.extension.length() + 1);
             break;
@@ -180,7 +179,9 @@ static QStringList translationsFromProjects(const Projects &projects, bool topLe
 
 static QStringList translationsFromProject(const Project &project, bool topLevel)
 {
-    QStringList result = *project.translations;
+    QStringList result;
+    if (project.translations)
+        result = *project.translations;
     result << translationsFromProjects(project.subProjects, false);
     if (topLevel && result.isEmpty()) {
         printErr(LR::tr("lrelease warning: Met no 'TRANSLATIONS' entry in project file '%1'\n")
@@ -205,7 +206,7 @@ int main(int argc, char **argv)
     QTranslator translator;
     QTranslator qtTranslator;
     QString sysLocale = QLocale::system().name();
-    QString resourceDir = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
+    QString resourceDir = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
     if (translator.load(QLatin1String("linguist_") + sysLocale, resourceDir)
         && qtTranslator.load(QLatin1String("qt_") + sysLocale, resourceDir)) {
         app.installTranslator(&translator);
@@ -287,7 +288,7 @@ int main(int argc, char **argv)
 
     QString errorString;
     if (!extractProFiles(&inputFiles).isEmpty()) {
-        runQtTool(QStringLiteral("lrelease-pro"), app.arguments().mid(1));
+        runInternalQtTool(QStringLiteral("lrelease-pro"), app.arguments().mid(1));
         return 0;
     }
 
@@ -304,7 +305,7 @@ int main(int argc, char **argv)
         inputFiles = translationsFromProjects(projectDescription);
     }
 
-    foreach (const QString &inputFile, inputFiles) {
+    for (const QString &inputFile : qAsConst(inputFiles)) {
         if (outputFile.isEmpty()) {
             if (!releaseTsFile(inputFile, cd, removeIdentical))
                 return 1;

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2019 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -26,12 +26,15 @@
 **
 ****************************************************************************/
 
-#include <qobjectdefs.h>
 #include "codemarker.h"
+
+#include "classnode.h"
 #include "config.h"
+#include "functionnode.h"
 #include "node.h"
-#include <qdebug.h>
-#include <stdio.h>
+#include "propertynode.h"
+
+#include <QtCore/qobjectdefs.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -63,9 +66,7 @@ CodeMarker::~CodeMarker()
   A code market performs no initialization by default. Marker-specific
   initialization is performed in subclasses.
  */
-void CodeMarker::initializeMarker(const Config& ) // config
-{
-}
+void CodeMarker::initializeMarker() {}
 
 /*!
   Terminating a code marker is trivial.
@@ -79,14 +80,11 @@ void CodeMarker::terminateMarker()
   All the code markers in the static list are initialized
   here, after the qdoc configuration file has been loaded.
  */
-void CodeMarker::initialize(const Config& config)
+void CodeMarker::initialize()
 {
-    defaultLang = config.getString(CONFIG_LANGUAGE);
-    QList<CodeMarker *>::ConstIterator m = markers.constBegin();
-    while (m != markers.constEnd()) {
-        (*m)->initializeMarker(config);
-        ++m;
-    }
+    defaultLang = Config::instance().getString(CONFIG_LANGUAGE);
+    for (const auto &marker : qAsConst(markers))
+        marker->initializeMarker();
 }
 
 /*!
@@ -94,29 +92,25 @@ void CodeMarker::initialize(const Config& config)
  */
 void CodeMarker::terminate()
 {
-    QList<CodeMarker *>::ConstIterator m = markers.constBegin();
-    while (m != markers.constEnd()) {
-        (*m)->terminateMarker();
-        ++m;
-    }
+    for (const auto &marker : qAsConst(markers))
+        marker->terminateMarker();
 }
 
-CodeMarker *CodeMarker::markerForCode(const QString& code)
+CodeMarker *CodeMarker::markerForCode(const QString &code)
 {
     CodeMarker *defaultMarker = markerForLanguage(defaultLang);
     if (defaultMarker != nullptr && defaultMarker->recognizeCode(code))
         return defaultMarker;
 
-    QList<CodeMarker *>::ConstIterator m = markers.constBegin();
-    while (m != markers.constEnd()) {
-        if ((*m)->recognizeCode(code))
-            return *m;
-        ++m;
+    for (const auto &marker : qAsConst(markers)) {
+        if (marker->recognizeCode(code))
+            return marker;
     }
+
     return defaultMarker;
 }
 
-CodeMarker *CodeMarker::markerForFileName(const QString& fileName)
+CodeMarker *CodeMarker::markerForFileName(const QString &fileName)
 {
     CodeMarker *defaultMarker = markerForLanguage(defaultLang);
     int dot = -1;
@@ -124,29 +118,25 @@ CodeMarker *CodeMarker::markerForFileName(const QString& fileName)
         QString ext = fileName.mid(dot + 1);
         if (defaultMarker != nullptr && defaultMarker->recognizeExtension(ext))
             return defaultMarker;
-        QList<CodeMarker *>::ConstIterator m = markers.constBegin();
-        while (m != markers.constEnd()) {
-            if ((*m)->recognizeExtension(ext))
-                return *m;
-            ++m;
+        for (const auto &marker : qAsConst(markers)) {
+            if (marker->recognizeExtension(ext))
+                return marker;
         }
         --dot;
     }
     return defaultMarker;
 }
 
-CodeMarker *CodeMarker::markerForLanguage(const QString& lang)
+CodeMarker *CodeMarker::markerForLanguage(const QString &lang)
 {
-    QList<CodeMarker *>::ConstIterator m = markers.constBegin();
-    while (m != markers.constEnd()) {
-        if ((*m)->recognizeLanguage(lang))
-            return *m;
-        ++m;
+    for (const auto &marker : qAsConst(markers)) {
+        if (marker->recognizeLanguage(lang))
+            return marker;
     }
     return nullptr;
 }
 
-const Node *CodeMarker::nodeForString(const QString& string)
+const Node *CodeMarker::nodeForString(const QString &string)
 {
 #if QT_POINTER_SIZE == 4
     const quintptr n = string.toUInt();
@@ -158,20 +148,94 @@ const Node *CodeMarker::nodeForString(const QString& string)
 
 QString CodeMarker::stringForNode(const Node *node)
 {
-    if (sizeof(const Node *) == sizeof(ulong)) {
-        return QString::number(reinterpret_cast<quintptr>(node));
-    }
-    else {
-        return QString::number(reinterpret_cast<qulonglong>(node));
-    }
+    return QString::number(reinterpret_cast<quintptr>(node));
 }
 
-static const QString samp  = QLatin1String("&amp;");
-static const QString slt   = QLatin1String("&lt;");
-static const QString sgt   = QLatin1String("&gt;");
+/*!
+    Returns the 'extra' synopsis string for \a node with status information,
+    using a specified section \a style.
+*/
+QString CodeMarker::extraSynopsis(const Node *node, Section::Style style)
+{
+    QStringList extra;
+    if (style == Section::Details) {
+        switch (node->nodeType()) {
+        case Node::Function: {
+            const auto *func = static_cast<const FunctionNode *>(node);
+            if (func->isStatic()) {
+                extra << "static";
+            } else if (!func->isNonvirtual()) {
+                if (func->isFinal())
+                    extra << "final";
+                if (func->isOverride())
+                    extra << "override";
+                if (func->isPureVirtual())
+                    extra << "pure";
+                extra << "virtual";
+            }
+
+            if (func->access() == Access::Protected)
+                extra << "protected";
+            else if (func->access() == Access::Private)
+                extra << "private";
+
+            if (func->isSignal()) {
+                if (func->parameters().isPrivateSignal())
+                    extra << "private";
+                extra << "signal";
+            } else if (func->isSlot())
+                extra << "slot";
+            else if (func->isDefault())
+                extra << "default";
+            else if (func->isInvokable())
+                extra << "invokable";
+        }
+        break;
+        case Node::TypeAlias:
+            extra << "alias";
+            break;
+        case Node::Property: {
+            auto propertyNode = static_cast<const PropertyNode *>(node);
+            if (propertyNode->propertyType() == PropertyNode::Bindable)
+                extra << "bindable";
+            if (!propertyNode->isWritable())
+                extra << "read-only";
+        }
+        break;
+        default:
+            break;
+        }
+    } else if (style == Section::Summary) {
+        if (node->isPreliminary())
+            extra << "preliminary";
+        else if (node->isDeprecated())
+            extra <<  "deprecated";
+        else if (node->isObsolete())
+            extra << "obsolete";
+    }
+
+    if (style == Section::Details && !node->since().isEmpty()) {
+        if (!extra.isEmpty())
+            extra.last() += QLatin1Char(',');
+        extra << "since" << node->since();
+    }
+
+    QString extraStr = extra.join(QLatin1Char(' '));
+    if (!extraStr.isEmpty()) {
+        extraStr.prepend(style == Section::Details ? '[' : '(');
+        extraStr.append(style == Section::Details ? ']' : ')');
+        extraStr.append(' ');
+    }
+
+    return extraStr;
+}
+
+static const QString samp = QLatin1String("&amp;");
+static const QString slt = QLatin1String("&lt;");
+static const QString sgt = QLatin1String("&gt;");
 static const QString squot = QLatin1String("&quot;");
 
-QString CodeMarker::protect(const QString& str)
+QString CodeMarker::protect(const QString &str)
 {
     int n = str.length();
     QString marked;
@@ -179,28 +243,46 @@ QString CodeMarker::protect(const QString& str)
     const QChar *data = str.constData();
     for (int i = 0; i != n; ++i) {
         switch (data[i].unicode()) {
-        case '&': marked += samp;  break;
-        case '<': marked += slt;   break;
-        case '>': marked += sgt;   break;
-        case '"': marked += squot; break;
-        default : marked += data[i];
+        case '&':
+            marked += samp;
+            break;
+        case '<':
+            marked += slt;
+            break;
+        case '>':
+            marked += sgt;
+            break;
+        case '"':
+            marked += squot;
+            break;
+        default:
+            marked += data[i];
         }
     }
     return marked;
 }
 
-void CodeMarker::appendProtectedString(QString *output, const QStringRef &str)
+void CodeMarker::appendProtectedString(QString *output, QStringView str)
 {
     int n = str.length();
     output->reserve(output->size() + n * 2 + 30);
     const QChar *data = str.constData();
     for (int i = 0; i != n; ++i) {
         switch (data[i].unicode()) {
-        case '&': *output += samp;  break;
-        case '<': *output += slt;   break;
-        case '>': *output += sgt;   break;
-        case '"': *output += squot; break;
-        default : *output += data[i];
+        case '&':
+            *output += samp;
+            break;
+        case '<':
+            *output += slt;
+            break;
+        case '>':
+            *output += sgt;
+            break;
+        case '"':
+            *output += squot;
+            break;
+        default:
+            *output += data[i];
         }
     }
 }
@@ -216,12 +298,10 @@ QString CodeMarker::typified(const QString &string, bool trailingSpace)
             ch = string.at(i);
 
         QChar lower = ch.toLower();
-        if ((lower >= QLatin1Char('a') && lower <= QLatin1Char('z'))
-                || ch.digitValue() >= 0 || ch == QLatin1Char('_')
-                || ch == QLatin1Char(':')) {
+        if ((lower >= QLatin1Char('a') && lower <= QLatin1Char('z')) || ch.digitValue() >= 0
+            || ch == QLatin1Char('_') || ch == QLatin1Char(':')) {
             pendingWord += ch;
-        }
-        else {
+        } else {
             if (!pendingWord.isEmpty()) {
                 bool isProbablyType = (pendingWord != QLatin1String("const"));
                 if (isProbablyType)
@@ -250,14 +330,13 @@ QString CodeMarker::typified(const QString &string, bool trailingSpace)
         }
     }
     if (trailingSpace && string.size()) {
-        if (!string.endsWith(QLatin1Char('*'))
-                && !string.endsWith(QLatin1Char('&')))
-                result += QLatin1Char(' ');
+        if (!string.endsWith(QLatin1Char('*')) && !string.endsWith(QLatin1Char('&')))
+            result += QLatin1Char(' ');
     }
     return result;
 }
 
-QString CodeMarker::taggedNode(const Node* node)
+QString CodeMarker::taggedNode(const Node *node)
 {
     QString tag;
     QString name = node->name();
@@ -303,15 +382,15 @@ QString CodeMarker::taggedNode(const Node* node)
         tag = QLatin1String("@unknown");
         break;
     }
-    return (QLatin1Char('<') + tag + QLatin1Char('>') + protect(name)
-            + QLatin1String("</") + tag + QLatin1Char('>'));
+    return (QLatin1Char('<') + tag + QLatin1Char('>') + protect(name) + QLatin1String("</") + tag
+            + QLatin1Char('>'));
 }
 
-QString CodeMarker::taggedQmlNode(const Node* node)
+QString CodeMarker::taggedQmlNode(const Node *node)
 {
     QString tag;
     if (node->isFunction()) {
-        const FunctionNode* fn = static_cast<const FunctionNode*>(node);
+        const FunctionNode *fn = static_cast<const FunctionNode *>(node);
         switch (fn->metaness()) {
         case FunctionNode::JsSignal:
         case FunctionNode::QmlSignal:
@@ -334,107 +413,14 @@ QString CodeMarker::taggedQmlNode(const Node* node)
     } else {
         tag = QLatin1String("@unknown");
     }
-    return QLatin1Char('<') + tag + QLatin1Char('>') + protect(node->name())
-            + QLatin1String("</") + tag + QLatin1Char('>');
+    return QLatin1Char('<') + tag + QLatin1Char('>') + protect(node->name()) + QLatin1String("</")
+            + tag + QLatin1Char('>');
 }
 
-QString CodeMarker::linkTag(const Node *node, const QString& body)
+QString CodeMarker::linkTag(const Node *node, const QString &body)
 {
-    return QLatin1String("<@link node=\"") + stringForNode(node)
-            + QLatin1String("\">") + body + QLatin1String("</@link>");
-}
-
-static QString encode(const QString &string)
-{
-    return string;
-}
-
-QStringList CodeMarker::macRefsForNode(Node *node)
-{
-    QString result = QLatin1String("cpp/");
-    switch (node->nodeType()) {
-    case Node::Class:
-    {
-        const ClassNode *classe = static_cast<const ClassNode *>(node);
-        {
-            result += QLatin1String("cl/");
-        }
-        result += macName(classe); // ### Maybe plainName?
-    }
-        break;
-    case Node::Enum:
-    {
-        QStringList stringList;
-        stringList << encode(result + QLatin1String("tag/") + macName(node));
-        foreach (const QString &enumName, node->doc().enumItemNames()) {
-            // ### Write a plainEnumValue() and use it here
-            stringList << encode(result + QLatin1String("econst/") +
-                                 macName(node->parent(), enumName));
-        }
-        return stringList;
-    }
-    case Node::Typedef:
-        result += QLatin1String("tdef/") + macName(node);
-        break;
-    case Node::Function:
-    {
-        bool isMacro = false;
-        Q_UNUSED(isMacro);
-        const FunctionNode *func = static_cast<const FunctionNode *>(node);
-
-        // overloads are too clever for the Xcode documentation browser
-        if (func->isOverload())
-            return QStringList();
-
-        if (func->isMacro()) {
-            result += QLatin1String("macro/");
-        }
-        else if (func->isStatic()) {
-            result += QLatin1String("clm/");
-        }
-        else if (!func->parent()->name().isEmpty()) {
-            result += QLatin1String("instm/");
-        }
-        else {
-            result += QLatin1String("func/");
-        }
-
-        result += macName(func);
-        if (result.endsWith(QLatin1String("()")))
-            result.chop(2);
-    }
-        break;
-    case Node::Variable:
-        result += QLatin1String("data/") + macName(node);
-        break;
-    case Node::Property:
-    {
-        NodeList list = static_cast<const PropertyNode*>(node)->functions();
-        QStringList stringList;
-        foreach (Node* node, list) {
-            stringList += macRefsForNode(node);
-        }
-        return stringList;
-    }
-    default:
-        return QStringList();
-    }
-
-    return QStringList(encode(result));
-}
-
-QString CodeMarker::macName(const Node *node, const QString &name)
-{
-    QString myName = name;
-    if (myName.isEmpty()) {
-        myName = node->name();
-        node = node->parent();
-    }
-
-    if (node->name().isEmpty())
-        return QLatin1Char('/') + protect(myName);
-    else
-        return node->plainFullName() + QLatin1Char('/') + protect(myName);
+    return QLatin1String("<@link node=\"") + stringForNode(node) + QLatin1String("\">") + body
+            + QLatin1String("</@link>");
 }
 
 QT_END_NAMESPACE

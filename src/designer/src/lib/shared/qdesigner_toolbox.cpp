@@ -34,12 +34,14 @@
 
 #include <QtDesigner/abstractformwindow.h>
 
-#include <QtWidgets/qaction.h>
 #include <QtWidgets/qtoolbox.h>
 #include <QtWidgets/qmenu.h>
 #include <QtWidgets/qlayout.h>
 #include <QtWidgets/qapplication.h>
+
+#include <QtGui/qaction.h>
 #include <QtGui/qevent.h>
+
 #include <QtCore/qhash.h>
 
 QT_BEGIN_NAMESPACE
@@ -256,7 +258,7 @@ QToolBoxWidgetPropertySheet::ToolBoxProperty QToolBoxWidgetPropertySheet::toolBo
 {
     using ToolBoxPropertyHash = QHash<QString, ToolBoxProperty>;
     static ToolBoxPropertyHash toolBoxPropertyHash;
-    if (toolBoxPropertyHash.empty()) {
+    if (toolBoxPropertyHash.isEmpty()) {
         toolBoxPropertyHash.insert(QLatin1String(currentItemTextKey),    PropertyCurrentItemText);
         toolBoxPropertyHash.insert(QLatin1String(currentItemNameKey),    PropertyCurrentItemName);
         toolBoxPropertyHash.insert(QLatin1String(currentItemIconKey),    PropertyCurrentItemIcon);

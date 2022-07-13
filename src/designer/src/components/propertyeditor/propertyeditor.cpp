@@ -53,7 +53,7 @@
 #include <iconloader_p.h>
 #include <widgetfactory_p.h>
 
-#include <QtWidgets/qaction.h>
+#include <QtWidgets/qlabel.h>
 #include <QtWidgets/qlineedit.h>
 #include <QtWidgets/qmenu.h>
 #include <QtWidgets/qapplication.h>
@@ -62,8 +62,9 @@
 #include <QtWidgets/qstackedwidget.h>
 #include <QtWidgets/qtoolbar.h>
 #include <QtWidgets/qtoolbutton.h>
-#include <QtWidgets/qactiongroup.h>
-#include <QtWidgets/qlabel.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qactiongroup.h>
 #include <QtGui/qpainter.h>
 
 #include <QtCore/qdebug.h>
@@ -213,7 +214,7 @@ PropertyEditor::PropertyEditor(QDesignerFormEditorInterface *core, QWidget *pare
     m_buttonAction(new QAction(tr("Drop Down Button View"), this)),
     m_classLabel(new ElidingLabel)
 {
-    QVector<QColor> colors;
+    QList<QColor> colors;
     colors.reserve(6);
     colors.push_back(QColor(255, 230, 191));
     colors.push_back(QColor(255, 255, 191));
@@ -255,14 +256,14 @@ PropertyEditor::PropertyEditor(QDesignerFormEditorInterface *core, QWidget *pare
     m_addDynamicAction->setMenu(addDynamicActionMenu);
     m_addDynamicAction->setEnabled(false);
     QAction *addDynamicAction = addDynamicActionGroup->addAction(tr("String..."));
-    addDynamicAction->setData(static_cast<int>(QVariant::String));
+    addDynamicAction->setData(static_cast<int>(QMetaType::QString));
     addDynamicActionMenu->addAction(addDynamicAction);
     addDynamicAction = addDynamicActionGroup->addAction(tr("Bool..."));
-    addDynamicAction->setData(static_cast<int>(QVariant::Bool));
+    addDynamicAction->setData(static_cast<int>(QMetaType::Bool));
     addDynamicActionMenu->addAction(addDynamicAction);
     addDynamicActionMenu->addSeparator();
     addDynamicAction = addDynamicActionGroup->addAction(tr("Other..."));
-    addDynamicAction->setData(static_cast<int>(QVariant::Invalid));
+    addDynamicAction->setData(static_cast<int>(QMetaType::UnknownType));
     addDynamicActionMenu->addAction(addDynamicAction);
     // remove
     m_removeDynamicAction->setEnabled(false);
@@ -363,7 +364,7 @@ PropertyEditor::PropertyEditor(QDesignerFormEditorInterface *core, QWidget *pare
         break;
     }
     // Restore expansionState from QVariant map
-    if (!expansionState.empty()) {
+    if (!expansionState.isEmpty()) {
         const QVariantMap::const_iterator cend = expansionState.constEnd();
         for (QVariantMap::const_iterator it = expansionState.constBegin(); it != cend; ++it)
             m_expansionState.insert(it.key(), it.value().toBool());
@@ -386,7 +387,7 @@ void PropertyEditor::saveSettings() const
     settings->setValue(QLatin1String(SortedKeyC), QVariant(m_sorting));
     // Save last expansionState as QVariant map
     QVariantMap expansionState;
-    if (!m_expansionState.empty()) {
+    if (!m_expansionState.isEmpty()) {
         const QMap<QString, bool>::const_iterator cend = m_expansionState.constEnd();
         for (QMap<QString, bool>::const_iterator it = m_expansionState.constBegin(); it != cend; ++it)
             expansionState.insert(it.key(), QVariant(it.value()));
@@ -436,7 +437,7 @@ void PropertyEditor::storePropertiesExpansionState(const QList<QtBrowserItem *> 
 {
     const QChar bar = QLatin1Char('|');
     for (QtBrowserItem *propertyItem : items) {
-        if (!propertyItem->children().empty()) {
+        if (!propertyItem->children().isEmpty()) {
             QtProperty *property = propertyItem->property();
             const QString propertyName = property->propertyName();
             const QMap<QtProperty *, QString>::const_iterator itGroup = m_propertyToGroup.constFind(property);
@@ -452,14 +453,14 @@ void PropertyEditor::storePropertiesExpansionState(const QList<QtBrowserItem *> 
 
 void PropertyEditor::storeExpansionState()
 {
-    const QList<QtBrowserItem *> items = m_currentBrowser->topLevelItems();
+    const auto items = m_currentBrowser->topLevelItems();
     if (m_sorting) {
         storePropertiesExpansionState(items);
     } else {
         for (QtBrowserItem *item : items) {
             const QString groupName = item->property()->propertyName();
-            QList<QtBrowserItem *> propertyItems = item->children();
-            if (!propertyItems.empty())
+            auto propertyItems = item->children();
+            if (!propertyItems.isEmpty())
                 m_expansionState[groupName] = isExpanded(item);
 
             // properties stuff here
@@ -470,7 +471,7 @@ void PropertyEditor::storeExpansionState()
 
 void PropertyEditor::collapseAll()
 {
-    const QList<QtBrowserItem *> items = m_currentBrowser->topLevelItems();
+    const auto items = m_currentBrowser->topLevelItems();
     for (QtBrowserItem *group : items)
         setExpanded(group, false);
 }
@@ -498,7 +499,7 @@ void PropertyEditor::applyPropertiesExpansionState(const QList<QtBrowserItem *> 
 
 void PropertyEditor::applyExpansionState()
 {
-    const QList<QtBrowserItem *> items = m_currentBrowser->topLevelItems();
+    const auto items = m_currentBrowser->topLevelItems();
     if (m_sorting) {
         applyPropertiesExpansionState(items);
     } else {
@@ -533,7 +534,7 @@ int PropertyEditor::applyPropertiesFilter(const QList<QtBrowserItem *> &items)
 
 void PropertyEditor::applyFilter()
 {
-    const QList<QtBrowserItem *> items = m_currentBrowser->topLevelItems();
+    const auto items = m_currentBrowser->topLevelItems();
     if (m_sorting) {
         applyPropertiesFilter(items);
     } else {
@@ -664,7 +665,7 @@ void PropertyEditor::slotSorting(bool sort)
 void PropertyEditor::updateColors()
 {
     if (m_treeBrowser && m_currentBrowser == m_treeBrowser) {
-        const QList<QtBrowserItem *> items = m_treeBrowser->topLevelItems();
+        const auto items = m_treeBrowser->topLevelItems();
         for (QtBrowserItem *item : items)
             m_treeBrowser->setBackgroundColor(item, propertyColor(item->property()));
     }
@@ -694,9 +695,9 @@ void PropertyEditor::slotAddDynamicProperty(QAction *action)
     QString newName;
     QVariant newValue;
     { // Make sure the dialog is closed before the signal is emitted.
-        const QVariant::Type type = static_cast<QVariant::Type>(action->data().toInt());
+        const int  type = action->data().toInt();
         NewDynamicPropertyDialog dlg(core()->dialogGui(), m_currentBrowser);
-        if (type != QVariant::Invalid)
+        if (type != QMetaType::UnknownType)
             dlg.setPropertyType(type);
 
         QStringList reservedNames;
@@ -814,7 +815,7 @@ void PropertyEditor::updateBrowserValue(QtVariantProperty *property, const QVari
     }
 
     // Rich text string property with comment: Store/Update the font the rich text editor dialog starts out with
-    if (type == QVariant::String && !property->subProperties().empty()) {
+    if (type == QMetaType::QString && !property->subProperties().isEmpty()) {
         const int fontIndex = m_propertySheet->indexOf(m_strings.m_fontProperty);
         if (fontIndex != -1)
             property->setAttribute(m_strings.m_fontAttribute, m_propertySheet->property(fontIndex));
@@ -865,9 +866,9 @@ QString PropertyEditor::realClassName(QObject *object) const
 static const char *typeName(int type)
 {
     if (type == qMetaTypeId<PropertySheetStringValue>())
-        type = QVariant::String;
-    if (type < int(QVariant::UserType))
-        return QVariant::typeToName(static_cast<QVariant::Type>(type));
+        type = QMetaType::QString;
+    if (type < int(QMetaType::User))
+        return QMetaType(type).name();
     if (type == qMetaTypeId<PropertySheetIconValue>())
         return "QIcon";
     if (type == qMetaTypeId<PropertySheetPixmapValue>())
@@ -878,9 +879,9 @@ static const char *typeName(int type)
         return "QFlags";
     if (type == qMetaTypeId<PropertySheetEnumValue>())
         return "enum";
-    if (type == QVariant::Invalid)
+    if (type == QMetaType::UnknownType)
         return "invalid";
-    if (type == QVariant::UserType)
+    if (type == QMetaType::User)
         return "user type";
     return nullptr;
 }
@@ -1040,16 +1041,16 @@ void PropertyEditor::setObject(QObject *object)
                 if (!descriptionToolTip.isEmpty())
                     property->setDescriptionToolTip(descriptionToolTip);
                 switch (type) {
-                case QVariant::Palette:
+                case QMetaType::QPalette:
                     setupPaletteProperty(property);
                     break;
-                case QVariant::KeySequence:
+                case QMetaType::QKeySequence:
                     //addCommentProperty(property, propertyName);
                     break;
                 default:
                     break;
                 }
-                if (type == QVariant::String || type == qMetaTypeId<PropertySheetStringValue>())
+                if (type == QMetaType::QString || type == qMetaTypeId<PropertySheetStringValue>())
                     setupStringProperty(property, isMainContainer);
                 property->setAttribute(m_strings.m_resettableAttribute, m_propertySheet->hasReset(i));
 
@@ -1092,9 +1093,9 @@ void PropertyEditor::setObject(QObject *object)
                 if (lastGroup != groupProperty) {
                     lastGroup = groupProperty;
                     lastProperty = nullptr;  // Append at end
-                    const QList<QtProperty*> subProperties = lastGroup->subProperties();
-                    if (!subProperties.empty())
-                        lastProperty = subProperties.back();
+                    const auto subProperties = lastGroup->subProperties();
+                    if (!subProperties.isEmpty())
+                        lastProperty = subProperties.constLast();
                     lastGroup = groupProperty;
                 }
                 if (!m_groups.contains(groupProperty))
@@ -1107,8 +1108,8 @@ void PropertyEditor::setObject(QObject *object)
                 updateBrowserValue(property, value);
 
                 property->setModified(m_propertySheet->isChanged(i));
-                if (propertyName == QStringLiteral("geometry") && type == QVariant::Rect) {
-                    const QList<QtProperty *> &subProperties = property->subProperties();
+                if (propertyName == QStringLiteral("geometry") && type == QMetaType::QRect) {
+                    const auto &subProperties = property->subProperties();
                     for (QtProperty *subProperty : subProperties) {
                         const QString subPropertyName = subProperty->propertyName();
                         if (subPropertyName == QStringLiteral("X") || subPropertyName == QStringLiteral("Y"))
@@ -1123,7 +1124,7 @@ void PropertyEditor::setObject(QObject *object)
     QMap<QString, QtVariantProperty *> groups = m_nameToGroup;
     for (auto itGroup = groups.cbegin(), end = groups.cend(); itGroup != end; ++itGroup) {
         QtVariantProperty *groupProperty = itGroup.value();
-        if (groupProperty->subProperties().empty()) {
+        if (groupProperty->subProperties().isEmpty()) {
             if (groupProperty == m_dynamicGroup)
                 m_dynamicGroup = nullptr;
             delete groupProperty;
@@ -1157,7 +1158,7 @@ QtBrowserItem *PropertyEditor::nonFakePropertyBrowserItem(QtBrowserItem *item) c
 {
     // Top-level properties are QObject/QWidget groups, etc. Find first item property below
     // which should be nonfake
-    const QList<QtBrowserItem *> topLevelItems = m_currentBrowser->topLevelItems();
+    const auto topLevelItems = m_currentBrowser->topLevelItems();
     do {
         if (topLevelItems.contains(item->parent()))
             return item;
@@ -1245,9 +1246,9 @@ void PropertyEditor::editProperty(const QString &name)
     // find the browser item belonging to the property, make it current and edit it
     QtBrowserItem *browserItem = nullptr;
     if (QtVariantProperty *property = m_nameToProperty.value(name, 0)) {
-        const QList<QtBrowserItem *> items = m_currentBrowser->items(property);
+        const auto items = m_currentBrowser->items(property);
         if (items.size() == 1)
-            browserItem = items.front();
+            browserItem = items.constFirst();
     }
     if (browserItem == nullptr)
         return;

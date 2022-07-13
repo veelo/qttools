@@ -61,9 +61,9 @@
 #include <QtWidgets/qstyleditemdelegate.h>
 #include <QtGui/qevent.h>
 
-#include <QtCore/qsortfilterproxymodel.h>
-#include <QtCore/qvector.h>
 #include <QtCore/qdebug.h>
+#include <QtCore/qlist.h>
+#include <QtCore/qsortfilterproxymodel.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -90,7 +90,7 @@ namespace {
         // A widget managed by the form window cursor
         ManagedWidgetSelection };
 
-    using QObjectVector = QVector<QObject *>;
+    using QObjectVector = QList<QObject *>;
 }
 
 static inline SelectionType selectionType(const QDesignerFormWindowInterface *fw, QObject *o)
@@ -357,7 +357,7 @@ void ObjectInspector::ObjectInspectorPrivate::handleDragEnterMoveEvent(const QWi
 
     QWidget *dropTarget = nullptr;
     QPoint fakeDropTargetOffset = QPoint(0, 0);
-    if (QWidget *managedWidget = managedWidgetAt(objectInspectorWidget->mapToGlobal(event->pos()))) {
+    if (QWidget *managedWidget = managedWidgetAt(objectInspectorWidget->mapToGlobal(event->position().toPoint()))) {
         fakeDropTargetOffset = dropPointOffset(m_formWindow, managedWidget);
         // pretend we drag over the managed widget on the form
         const QPoint fakeFormPos = m_formWindow->mapFromGlobal(managedWidget->mapToGlobal(fakeDropTargetOffset));
@@ -424,7 +424,7 @@ bool ObjectInspector::ObjectInspectorPrivate::selectObject(QObject *o)
     using ModelIndexSet = QSet<QModelIndex>;
 
     const QModelIndexList objectIndexes = indexesOf(o);
-    if (objectIndexes.empty())
+    if (objectIndexes.isEmpty())
         return false;
 
     QItemSelectionModel *selectionModel = m_treeView->selectionModel();
@@ -432,8 +432,10 @@ bool ObjectInspector::ObjectInspectorPrivate::selectObject(QObject *o)
     const ModelIndexSet currentSelectedItems(currentSelectedItemList.cbegin(), currentSelectedItemList.cend());
 
     // Change in selection?
-    if (!currentSelectedItems.empty() && currentSelectedItems == ModelIndexSet(objectIndexes.cbegin(), objectIndexes.cend()))
+    if (!currentSelectedItems.isEmpty()
+        && currentSelectedItems == ModelIndexSet(objectIndexes.cbegin(), objectIndexes.cend())) {
         return true;
+    }
 
     // do select and update
     selectIndexRange(objectIndexes, MakeCurrent);
@@ -442,7 +444,7 @@ bool ObjectInspector::ObjectInspectorPrivate::selectObject(QObject *o)
 
 void ObjectInspector::ObjectInspectorPrivate::selectIndexRange(const QModelIndexList &indexes, unsigned flags)
 {
-    if (indexes.empty())
+    if (indexes.isEmpty())
         return;
 
     QItemSelectionModel::SelectionFlags selectFlags = QItemSelectionModel::Select|QItemSelectionModel::Rows;
@@ -459,7 +461,7 @@ void ObjectInspector::ObjectInspectorPrivate::selectIndexRange(const QModelIndex
             selectFlags &= ~(QItemSelectionModel::Clear|QItemSelectionModel::Current);
         }
     if (flags & MakeCurrent)
-        m_treeView->scrollTo(indexes.front(), QAbstractItemView::EnsureVisible);
+        m_treeView->scrollTo(indexes.constFirst(), QAbstractItemView::EnsureVisible);
 }
 
 void ObjectInspector::ObjectInspectorPrivate::clear()
@@ -528,10 +530,10 @@ void ObjectInspector::ObjectInspectorPrivate::setFormWindowBlocked(QDesignerForm
         bool applySelection = !mainContainerIsCurrent(m_formWindow);
         if (!applySelection) {
             const QModelIndexList currentIndexes = m_treeView->selectionModel()->selectedRows(0);
-            if (currentIndexes.empty()) {
+            if (currentIndexes.isEmpty()) {
                 applySelection = true;
             } else {
-                applySelection = selectionType(m_formWindow, objectAt(currentIndexes.front())) == ManagedWidgetSelection;
+                applySelection = selectionType(m_formWindow, objectAt(currentIndexes.constFirst())) == ManagedWidgetSelection;
             }
         }
         if (applySelection)
@@ -590,7 +592,7 @@ void ObjectInspector::ObjectInspectorPrivate::slotSelectionChanged(const QItemSe
 // some index lists are multicolumn ranges
 QObjectVector ObjectInspector::ObjectInspectorPrivate::indexesToObjects(const QModelIndexList &indexes) const
 {
-    if (indexes.empty())
+    if (indexes.isEmpty())
         return  QObjectVector();
     QObjectVector rc;
     rc.reserve(indexes.size());
@@ -638,11 +640,11 @@ void ObjectInspector::ObjectInspectorPrivate::synchronizeSelection(const QItemSe
     const QModelIndexList currentSelectedIndexes = m_treeView->selectionModel()->selectedRows(0);
 
     int deselectedManagedWidgetCount = 0;
-    if (!deselected.empty())
+    if (!deselected.isEmpty())
         deselectedManagedWidgetCount = selectInCursor(m_formWindow, deselected, false);
 
-    if (newlySelected.empty()) { // Nothing selected
-        if (currentSelectedIndexes.empty()) // Do not allow a null-selection, reset to main container
+    if (newlySelected.isEmpty()) { // Nothing selected
+        if (currentSelectedIndexes.isEmpty()) // Do not allow a null-selection, reset to main container
             m_formWindow->clearSelection(!m_withinClearSelection);
         return;
     }
@@ -660,7 +662,7 @@ void ObjectInspector::ObjectInspectorPrivate::synchronizeSelection(const QItemSe
         }
         // And now for the unmanaged selection
         m_formWindow->clearSelection(false);
-        QObject *unmanagedObject = newlySelected.front();
+        QObject *unmanagedObject = newlySelected.constFirst();
         m_core->propertyEditor()->setObject(unmanagedObject);
         m_core->propertyEditor()->setEnabled(true);
         // open container page if it is a single widget
@@ -670,7 +672,7 @@ void ObjectInspector::ObjectInspectorPrivate::synchronizeSelection(const QItemSe
     }
     // Open container page if it is a single widget
     if (newlySelected.size() == 1) {
-        QObject *object = newlySelected.back();
+        QObject *object = newlySelected.constFirst();
         if (object->isWidgetType())
             showContainersCurrentPage(static_cast<QWidget*>(object));
     }
@@ -693,7 +695,7 @@ void ObjectInspector::ObjectInspectorPrivate::getSelection(Selection &s) const
         return;
 
     const QModelIndexList currentSelectedIndexes = m_treeView->selectionModel()->selectedRows(0);
-    if (currentSelectedIndexes.empty())
+    if (currentSelectedIndexes.isEmpty())
         return;
 
     // sort objects

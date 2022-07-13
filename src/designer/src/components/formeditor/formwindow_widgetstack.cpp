@@ -29,11 +29,12 @@
 #include "formwindow_widgetstack.h"
 #include <QtDesigner/abstractformwindowtool.h>
 
-#include <QtWidgets/qwidget.h>
-#include <QtGui/qevent.h>
-#include <QtWidgets/qaction.h>
 #include <QtWidgets/qstackedlayout.h>
 #include <QtWidgets/qboxlayout.h>
+#include <QtWidgets/qwidget.h>
+
+#include <QtGui/qevent.h>
+#include <QtGui/qaction.h>
 
 #include <QtCore/qdebug.h>
 
@@ -165,7 +166,7 @@ void FormWindowWidgetStack::addTool(QDesignerFormWindowToolInterface *tool)
         m_layout->addWidget(w);
     } else {
         // The form editor might not have a tool initially, use dummy. Assert on anything else
-        Q_ASSERT(m_tools.empty());
+        Q_ASSERT(m_tools.isEmpty());
         m_layout->addWidget(m_formContainer);
     }
 

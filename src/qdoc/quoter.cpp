@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2019 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -26,15 +26,15 @@
 **
 ****************************************************************************/
 
-#include <qfileinfo.h>
-#include <qregexp.h>
-#include <qdebug.h>
-
 #include "quoter.h"
+
+#include <QtCore/qdebug.h>
+#include <QtCore/qfileinfo.h>
+#include <QtCore/qregularexpression.h>
 
 QT_BEGIN_NAMESPACE
 
-QHash<QString,QString> Quoter::commentHash;
+QHash<QString, QString> Quoter::commentHash;
 
 static void replaceMultipleNewlines(QString &s)
 {
@@ -54,7 +54,7 @@ static void replaceMultipleNewlines(QString &s)
     s.resize(++j);
 }
 
-// This is equivalent to  line.split( QRegExp("\n(?!\n|$)") ) but much faster
+// This is equivalent to  line.split( QRegularExpression("\n(?!\n|$)") ) but much faster
 QStringList Quoter::splitLines(const QString &line)
 {
     QStringList result;
@@ -77,26 +77,26 @@ QStringList Quoter::splitLines(const QString &line)
   Transforms 'int x = 3 + 4' into 'int x=3+4'. A white space is kept
   between 'int' and 'x' because it is meaningful in C++.
 */
-static void trimWhiteSpace( QString& str )
+static void trimWhiteSpace(QString &str)
 {
     enum { Normal, MetAlnum, MetSpace } state = Normal;
     const int n = str.length();
 
     int j = -1;
     QChar *d = str.data();
-    for ( int i = 0; i != n; ++i ) {
+    for (int i = 0; i != n; ++i) {
         const QChar c = d[i];
-        if ( c.isLetterOrNumber() ) {
-            if ( state == Normal ) {
+        if (c.isLetterOrNumber()) {
+            if (state == Normal) {
                 state = MetAlnum;
             } else {
-                if ( state == MetSpace )
+                if (state == MetSpace)
                     str[++j] = c;
                 state = Normal;
             }
             str[++j] = c;
-        } else if ( c.isSpace() ) {
-            if ( state == MetAlnum )
+        } else if (c.isSpace()) {
+            if (state == MetAlnum)
                 state = MetSpace;
         } else {
             state = Normal;
@@ -106,15 +106,14 @@ static void trimWhiteSpace( QString& str )
     str.resize(++j);
 }
 
-Quoter::Quoter()
-    : silent( false )
+Quoter::Quoter() : silent(false)
 {
     /* We're going to hard code these delimiters:
         * C++, Qt, Qt Script, Java:
           //! [<id>]
         * .pro, .py, CMake files:
           #! [<id>]
-        * .html, .qrc, .ui, .xq, .xml .dita files:
+        * .html, .qrc, .ui, .xq, .xml files:
           <!-- [<id>] -->
     */
     if (!commentHash.size()) {
@@ -125,7 +124,6 @@ Quoter::Quoter()
         commentHash["qrc"] = "<!--";
         commentHash["ui"] = "<!--";
         commentHash["xml"] = "<!--";
-        commentHash["dita"] = "<!--";
         commentHash["xq"] = "<!--";
     }
 }
@@ -135,12 +133,11 @@ void Quoter::reset()
     silent = false;
     plainLines.clear();
     markedLines.clear();
-    codeLocation = Location::null;
+    codeLocation = Location();
 }
 
-void Quoter::quoteFromFile( const QString& userFriendlyFilePath,
-                            const QString& plainCode,
-                            const QString& markedCode )
+void Quoter::quoteFromFile(const QString &userFriendlyFilePath, const QString &plainCode,
+                           const QString &markedCode)
 {
     silent = false;
 
@@ -165,46 +162,43 @@ void Quoter::quoteFromFile( const QString& userFriendlyFilePath,
 
       Newlines are preserved because they affect codeLocation.
     */
-    codeLocation = Location( userFriendlyFilePath );
+    codeLocation = Location(userFriendlyFilePath);
 
     plainLines = splitLines(plainCode);
     markedLines = splitLines(markedCode);
     if (markedLines.count() != plainLines.count()) {
-        codeLocation.warning(tr("Something is wrong with qdoc's handling of marked code"));
+        codeLocation.warning(
+                QStringLiteral("Something is wrong with qdoc's handling of marked code"));
         markedLines = plainLines;
     }
 
     /*
       Squeeze blanks (cat -s).
     */
-    QStringList::Iterator m = markedLines.begin();
-    while ( m != markedLines.end() ) {
-        replaceMultipleNewlines( *m );
-        ++m;
-    }
+    for (auto &line : markedLines)
+        replaceMultipleNewlines(line);
     codeLocation.start();
 }
 
-QString Quoter::quoteLine( const Location& docLocation, const QString& command,
-                           const QString& pattern )
+QString Quoter::quoteLine(const Location &docLocation, const QString &command,
+                          const QString &pattern)
 {
-    if ( plainLines.isEmpty() ) {
-        failedAtEnd( docLocation, command );
+    if (plainLines.isEmpty()) {
+        failedAtEnd(docLocation, command);
         return QString();
     }
 
-    if ( pattern.isEmpty() ) {
-        docLocation.warning( tr("Missing pattern after '\\%1'").arg(command) );
+    if (pattern.isEmpty()) {
+        docLocation.warning(QStringLiteral("Missing pattern after '\\%1'").arg(command));
         return QString();
     }
 
-    if ( match(docLocation, pattern, plainLines.first()) )
+    if (match(docLocation, pattern, plainLines.first()))
         return getLine();
 
-    if ( !silent ) {
-        docLocation.warning( tr("Command '\\%1' failed").arg(command) );
-        codeLocation.warning( tr("Pattern '%1' didn't match here")
-                              .arg(pattern) );
+    if (!silent) {
+        docLocation.warning(QStringLiteral("Command '\\%1' failed").arg(command));
+        codeLocation.warning(QStringLiteral("Pattern '%1' didn't match here").arg(pattern));
         silent = true;
     }
     return QString();
@@ -252,40 +246,39 @@ QString Quoter::quoteSnippet(const Location &docLocation, const QString &identif
     return t;
 }
 
-QString Quoter::quoteTo( const Location& docLocation, const QString& command,
-                         const QString& pattern )
+QString Quoter::quoteTo(const Location &docLocation, const QString &command, const QString &pattern)
 {
     QString t;
     QString comment = commentForCode();
 
-    if ( pattern.isEmpty() ) {
-        while ( !plainLines.isEmpty() ) {
+    if (pattern.isEmpty()) {
+        while (!plainLines.isEmpty()) {
             QString line = plainLines.first();
             t += removeSpecialLines(line, comment);
         }
     } else {
-        while ( !plainLines.isEmpty() ) {
-            if ( match(docLocation, pattern, plainLines.first()) ) {
+        while (!plainLines.isEmpty()) {
+            if (match(docLocation, pattern, plainLines.first())) {
                 return t;
             }
             t += getLine();
         }
-        failedAtEnd( docLocation, command );
+        failedAtEnd(docLocation, command);
     }
     return t;
 }
 
-QString Quoter::quoteUntil( const Location& docLocation, const QString& command,
-                            const QString& pattern )
+QString Quoter::quoteUntil(const Location &docLocation, const QString &command,
+                           const QString &pattern)
 {
-    QString t = quoteTo( docLocation, command, pattern );
+    QString t = quoteTo(docLocation, command, pattern);
     t += getLine();
     return t;
 }
 
 QString Quoter::getLine(int unindent)
 {
-    if ( plainLines.isEmpty() )
+    if (plainLines.isEmpty())
         return QString();
 
     plainLines.removeFirst();
@@ -297,42 +290,41 @@ QString Quoter::getLine(int unindent)
 
     t = t.mid(i);
     t += QLatin1Char('\n');
-    codeLocation.advanceLines( t.count( QLatin1Char('\n') ) );
+    codeLocation.advanceLines(t.count(QLatin1Char('\n')));
     return t;
 }
 
-bool Quoter::match( const Location& docLocation, const QString& pattern0,
-                    const QString& line )
+bool Quoter::match(const Location &docLocation, const QString &pattern0, const QString &line)
 {
     QString str = line;
-    while ( str.endsWith(QLatin1Char('\n')) )
-        str.truncate( str.length() - 1 );
+    while (str.endsWith(QLatin1Char('\n')))
+        str.truncate(str.length() - 1);
 
     QString pattern = pattern0;
-    if ( pattern.startsWith(QLatin1Char('/'))
-         && pattern.endsWith(QLatin1Char('/'))
-         && pattern.length() > 2 ) {
-        QRegExp rx( pattern.mid(1, pattern.length() - 2) );
-        if ( !silent && !rx.isValid() ) {
-            docLocation.warning( tr("Invalid regular expression '%1'")
-                                 .arg(rx.pattern()) );
+    if (pattern.startsWith(QLatin1Char('/')) && pattern.endsWith(QLatin1Char('/'))
+        && pattern.length() > 2) {
+        QRegularExpression rx(pattern.mid(1, pattern.length() - 2));
+        if (!silent && !rx.isValid()) {
+            docLocation.warning(
+                    QStringLiteral("Invalid regular expression '%1'").arg(rx.pattern()));
             silent = true;
         }
-        return str.indexOf( rx ) != -1;
+        return str.indexOf(rx) != -1;
     }
     trimWhiteSpace(str);
     trimWhiteSpace(pattern);
     return str.indexOf(pattern) != -1;
 }
 
-void Quoter::failedAtEnd( const Location& docLocation, const QString& command )
+void Quoter::failedAtEnd(const Location &docLocation, const QString &command)
 {
     if (!silent && !command.isEmpty()) {
-        if ( codeLocation.filePath().isEmpty() ) {
-            docLocation.warning( tr("Unexpected '\\%1'").arg(command) );
+        if (codeLocation.filePath().isEmpty()) {
+            docLocation.warning(QStringLiteral("Unexpected '\\%1'").arg(command));
         } else {
-            docLocation.warning( tr("Command '\\%1' failed at end of file '%2'")
-                                 .arg(command).arg(codeLocation.filePath()) );
+            docLocation.warning(QStringLiteral("Command '\\%1' failed at end of file '%2'")
+                                        .arg(command)
+                                        .arg(codeLocation.filePath()));
         }
         silent = true;
     }

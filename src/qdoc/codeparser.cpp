@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2019 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -31,12 +31,14 @@
 */
 
 #include "codeparser.h"
-#include "node.h"
-#include "tree.h"
+
 #include "config.h"
 #include "generator.h"
+#include "node.h"
+#include "proxynode.h"
 #include "qdocdatabase.h"
-#include <qdebug.h>
+
+#include <QtCore/qregularexpression.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -66,10 +68,10 @@ CodeParser::~CodeParser()
 /*!
   Initialize the code parser base class.
  */
-void CodeParser::initializeParser(const Config& config)
+void CodeParser::initializeParser()
 {
-    showInternal_ = config.getBool(CONFIG_SHOWINTERNAL);
-    singleExec_ = config.getBool(CONFIG_SINGLEEXEC);
+    showInternal_ = Config::instance().showInternal();
+    singleExec_ = Config::instance().getBool(CONFIG_SINGLEEXEC);
 }
 
 /*!
@@ -85,7 +87,7 @@ QStringList CodeParser::headerFileNameFilter()
     return sourceFileNameFilter();
 }
 
-void CodeParser::parseHeaderFile(const Location& location, const QString& filePath)
+void CodeParser::parseHeaderFile(const Location &location, const QString &filePath)
 {
     parseSourceFile(location, filePath);
 }
@@ -94,13 +96,10 @@ void CodeParser::parseHeaderFile(const Location& location, const QString& filePa
   All the code parsers in the static list are initialized here,
   after the qdoc configuration variables have been set.
  */
-void CodeParser::initialize(const Config& config)
+void CodeParser::initialize()
 {
-    QList<CodeParser *>::ConstIterator p = parsers.constBegin();
-    while (p != parsers.constEnd()) {
-        (*p)->initializeParser(config);
-        ++p;
-    }
+    for (const auto &parser : qAsConst(parsers))
+        parser->initializeParser();
 }
 
 /*!
@@ -108,20 +107,15 @@ void CodeParser::initialize(const Config& config)
  */
 void CodeParser::terminate()
 {
-    QList<CodeParser *>::ConstIterator p = parsers.constBegin();
-    while (p != parsers.constEnd()) {
-        (*p)->terminateParser();
-        ++p;
-    }
+    for (const auto parser : parsers)
+        parser->terminateParser();
 }
 
-CodeParser *CodeParser::parserForLanguage(const QString& language)
+CodeParser *CodeParser::parserForLanguage(const QString &language)
 {
-    QList<CodeParser *>::ConstIterator p = parsers.constBegin();
-    while (p != parsers.constEnd()) {
-        if ((*p)->language() == language)
-            return *p;
-        ++p;
+    for (const auto parser : qAsConst(parsers)) {
+        if (parser->language() == language)
+            return parser;
     }
     return nullptr;
 }
@@ -130,16 +124,13 @@ CodeParser *CodeParser::parserForHeaderFile(const QString &filePath)
 {
     QString fileName = QFileInfo(filePath).fileName();
 
-    QList<CodeParser *>::ConstIterator p = parsers.constBegin();
-    while (p != parsers.constEnd()) {
-
-        QStringList headerPatterns = (*p)->headerFileNameFilter();
-        foreach (const QString &pattern, headerPatterns) {
-            QRegExp re(pattern, Qt::CaseInsensitive, QRegExp::Wildcard);
-            if (re.exactMatch(fileName))
-                return *p;
+    for (const auto &parser : qAsConst(parsers)) {
+        const QStringList headerPatterns = parser->headerFileNameFilter();
+        for (const auto &pattern : headerPatterns) {
+            auto re = QRegularExpression::fromWildcard(pattern, Qt::CaseInsensitive);
+            if (re.match(fileName).hasMatch())
+                return parser;
         }
-        ++p;
     }
     return nullptr;
 }
@@ -148,16 +139,13 @@ CodeParser *CodeParser::parserForSourceFile(const QString &filePath)
 {
     QString fileName = QFileInfo(filePath).fileName();
 
-    QList<CodeParser *>::ConstIterator p = parsers.constBegin();
-    while (p != parsers.constEnd()) {
-
-        QStringList sourcePatterns = (*p)->sourceFileNameFilter();
-        foreach (const QString &pattern, sourcePatterns) {
-            QRegExp re(pattern, Qt::CaseInsensitive, QRegExp::Wildcard);
-            if (re.exactMatch(fileName))
-                return *p;
+    for (const auto &parser : parsers) {
+        const QStringList sourcePatterns = parser->sourceFileNameFilter();
+        for (const QString &pattern : sourcePatterns) {
+            auto re = QRegularExpression::fromWildcard(pattern, Qt::CaseInsensitive);
+            if (re.match(fileName).hasMatch())
+                return parser;
         }
-        ++p;
     }
     return nullptr;
 }
@@ -166,63 +154,42 @@ static QSet<QString> commonMetaCommands_;
 /*!
   Returns the set of strings representing the common metacommands.
  */
-const QSet<QString>& CodeParser::commonMetaCommands()
+const QSet<QString> &CodeParser::commonMetaCommands()
 {
     if (commonMetaCommands_.isEmpty()) {
-        commonMetaCommands_ << COMMAND_ABSTRACT
-                            << COMMAND_DEPRECATED
-                            << COMMAND_INGROUP
-                            << COMMAND_INJSMODULE
-                            << COMMAND_INMODULE
-                            << COMMAND_INPUBLICGROUP
-                            << COMMAND_INQMLMODULE
-                            << COMMAND_INTERNAL
-                            << COMMAND_MAINCLASS
-                            << COMMAND_NOAUTOLIST
-                            << COMMAND_NONREENTRANT
-                            << COMMAND_OBSOLETE
-                            << COMMAND_PAGEKEYWORDS
-                            << COMMAND_PRELIMINARY
-                            << COMMAND_QMLABSTRACT
-                            << COMMAND_QMLDEFAULT
-                            << COMMAND_QMLINHERITS
-                            << COMMAND_QMLREADONLY
-                            << COMMAND_QTVARIABLE
-                            << COMMAND_REENTRANT
-                            << COMMAND_SINCE
-                            << COMMAND_STARTPAGE
-                            << COMMAND_SUBTITLE
-                            << COMMAND_THREADSAFE
-                            << COMMAND_TITLE
-                            << COMMAND_WRAPPER;
-   }
+        commonMetaCommands_ << COMMAND_ABSTRACT << COMMAND_DEPRECATED << COMMAND_INGROUP
+                            << COMMAND_INJSMODULE << COMMAND_INMODULE << COMMAND_INPUBLICGROUP
+                            << COMMAND_INQMLMODULE << COMMAND_INTERNAL << COMMAND_NOAUTOLIST
+                            << COMMAND_NONREENTRANT << COMMAND_OBSOLETE << COMMAND_PRELIMINARY
+                            << COMMAND_QMLABSTRACT << COMMAND_QMLDEFAULT << COMMAND_QMLINHERITS
+                            << COMMAND_QMLREADONLY << COMMAND_QMLREQUIRED << COMMAND_QTCMAKEPACKAGE
+                            << COMMAND_QTVARIABLE << COMMAND_REENTRANT << COMMAND_SINCE
+                            << COMMAND_STARTPAGE  << COMMAND_SUBTITLE << COMMAND_THREADSAFE
+                            << COMMAND_TITLE << COMMAND_WRAPPER;
+    }
     return commonMetaCommands_;
 }
 
 /*!
   \internal
  */
-void CodeParser::extractPageLinkAndDesc(const QString& arg,
-                                        QString* link,
-                                        QString* desc)
+void CodeParser::extractPageLinkAndDesc(QStringView arg, QString *link, QString *desc)
 {
-    QRegExp bracedRegExp(QLatin1String("\\{([^{}]*)\\}(?:\\{([^{}]*)\\})?"));
-
-    if (bracedRegExp.exactMatch(arg)) {
-        *link = bracedRegExp.cap(1);
-        *desc = bracedRegExp.cap(2);
+    QRegularExpression bracedRegExp(QRegularExpression::anchoredPattern(QLatin1String("\\{([^{}]*)\\}(?:\\{([^{}]*)\\})?")));
+    auto match = bracedRegExp.match(arg);
+    if (match.hasMatch()) {
+        *link = match.captured(1);
+        *desc = match.captured(2);
         if (desc->isEmpty())
             *desc = *link;
-    }
-    else {
+    } else {
         int spaceAt = arg.indexOf(QLatin1Char(' '));
         if (arg.contains(QLatin1String(".html")) && spaceAt != -1) {
-            *link = arg.leftRef(spaceAt).trimmed().toString();
-            *desc = arg.midRef(spaceAt).trimmed().toString();
-        }
-        else {
-            *link = arg;
-            *desc = arg;
+            *link = arg.left(spaceAt).trimmed().toString();
+            *desc = arg.mid(spaceAt).trimmed().toString();
+        } else {
+            *link = arg.toString();
+            *desc = *link;
         }
     }
 }
@@ -230,7 +197,7 @@ void CodeParser::extractPageLinkAndDesc(const QString& arg,
 /*!
   \internal
  */
-void CodeParser::setLink(Node* node, Node::LinkType linkType, const QString& arg)
+void CodeParser::setLink(Node *node, Node::LinkType linkType, const QString &arg)
 {
     QString link;
     QString desc;
@@ -299,31 +266,36 @@ bool CodeParser::isParsingQdoc() const
   In some cases it prints a qdoc warning that it has done this. Namely,
   for C++ classes and namespaces.
  */
-void CodeParser::checkModuleInclusion(Node* n)
+void CodeParser::checkModuleInclusion(Node *n)
 {
     if (n->physicalModuleName().isEmpty()) {
         n->setPhysicalModuleName(Generator::defaultModuleName());
-        QString word;
-        switch (n->nodeType()) {
-        case Node::Class:
-            word = QLatin1String("Class");
-            break;
-        case Node::Struct:
-            word = QLatin1String("Struct");
-            break;
-        case Node::Union:
-            word = QLatin1String("Union");
-            break;
-        case Node::Namespace:
-            word = QLatin1String("Namespace");
-            break;
-        default:
-            return;
-        }
-        if (!n->isPrivate() && !n->name().isEmpty() && !n->doc().isEmpty()) {
-            n->doc().location().warning(tr("%1 %2 has no \\inmodule command; "
-                                           "using project name by default: %3")
-                                        .arg(word).arg(n->name()).arg(Generator::defaultModuleName()));
+
+        if (n->isInAPI() && !n->name().isEmpty()) {
+            QString word;
+            switch (n->nodeType()) {
+            case Node::Class:
+                word = QLatin1String("Class");
+                break;
+            case Node::Struct:
+                word = QLatin1String("Struct");
+                break;
+            case Node::Union:
+                word = QLatin1String("Union");
+                break;
+            case Node::Namespace:
+                word = QLatin1String("Namespace");
+                break;
+            default:
+                return;
+            }
+
+            qdb_->addToModule(Generator::defaultModuleName(), n);
+            n->doc().location().warning(QStringLiteral("%1 %2 has no \\inmodule command; "
+                                                       "using project name by default: %3")
+                                                .arg(word)
+                                                .arg(n->name())
+                                                .arg(Generator::defaultModuleName()));
         }
     }
 }

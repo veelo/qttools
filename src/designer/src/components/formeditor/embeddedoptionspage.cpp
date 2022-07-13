@@ -52,6 +52,7 @@
 #include <QtWidgets/qgroupbox.h>
 
 #include <QtCore/qset.h>
+#include <QtCore/qlist.h>
 
 #include <algorithm>
 
@@ -144,7 +145,7 @@ void EmbeddedOptionsControlPrivate::init(EmbeddedOptionsControl *q)
     m_profileCombo->setEditable(false);
     hLayout->addWidget(m_profileCombo);
     m_profileCombo->addItem(EmbeddedOptionsControl::tr("None"));
-    EmbeddedOptionsControl::connect(m_profileCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+    EmbeddedOptionsControl::connect(m_profileCombo, &QComboBox::currentIndexChanged,
                                     m_q, &EmbeddedOptionsControl::slotProfileIndexChanged);
 
     m_addButton->setIcon(createIconSet(QString::fromUtf8("plus.png")));
@@ -265,7 +266,7 @@ void EmbeddedOptionsControlPrivate::sortAndPopulateProfileCombo()
     // Clear items until only "None" is left
     for (int i = m_profileCombo->count() - 1; i > 0; i--)
         m_profileCombo->removeItem(i);
-    if (!m_sortedProfiles.empty()) {
+    if (!m_sortedProfiles.isEmpty()) {
         std::sort(m_sortedProfiles.begin(), m_sortedProfiles.end(), deviceProfileLessThan);
         m_profileCombo->addItems(existingProfileNames());
     }

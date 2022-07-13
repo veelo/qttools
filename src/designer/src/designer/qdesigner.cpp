@@ -68,7 +68,7 @@ static void designerMessageHandler(QtMsgType type, const QMessageLogContext &con
         previousMessageHandler(type, context, msg);
         return;
     }
-    designerApp->showErrorMessage(qPrintable(msg));
+    designerApp->showErrorMessage(msg);
 }
 
 QDesigner::QDesigner(int &argc, char **argv)
@@ -94,10 +94,11 @@ QDesigner::~QDesigner()
     delete m_client;
 }
 
-void QDesigner::showErrorMessage(const char *message)
+void QDesigner::showErrorMessage(const QString &message)
 {
     // strip the prefix
-    const QString qMessage = QString::fromUtf8(message + qstrlen(designerWarningPrefix));
+    const QString qMessage =
+        message.right(message.size() - int(qstrlen(designerWarningPrefix)));
     // If there is no main window yet, just store the message.
     // The QErrorMessage would otherwise be hidden by the main window.
     if (m_mainWindow) {
@@ -159,7 +160,7 @@ static void showHelp(QCommandLineParser &parser, const QString &errorMessage = Q
 struct Options
 {
     QStringList files;
-    QString resourceDir{QLibraryInfo::location(QLibraryInfo::TranslationsPath)};
+    QString resourceDir{QLibraryInfo::path(QLibraryInfo::TranslationsPath)};
     bool server{false};
     quint16 clientPort{0};
     bool enableInternalDynamicProperties{false};
@@ -188,6 +189,7 @@ static inline QDesigner::ParseArgumentsResult
     const QCommandLineOption internalDynamicPropertyOption(QStringLiteral("enableinternaldynamicproperties"),
                                           QStringLiteral("Enable internal dynamic properties"));
     parser.addOption(internalDynamicPropertyOption);
+
     parser.addPositionalArgument(QStringLiteral("files"),
                                  QStringLiteral("The UI files to open."));
 
@@ -235,13 +237,12 @@ QDesigner::ParseArgumentsResult QDesigner::parseCommandLineArguments()
     if (options.enableInternalDynamicProperties)
         QDesignerPropertySheet::setInternalDynamicPropertiesEnabled(true);
 
-    const QString localSysName = QLocale::system().name();
-    QScopedPointer<QTranslator> designerTranslator(new QTranslator(this));
-    if (designerTranslator->load(QStringLiteral("designer_") + localSysName, options.resourceDir)) {
-        installTranslator(designerTranslator.take());
-        QScopedPointer<QTranslator> qtTranslator(new QTranslator(this));
-        if (qtTranslator->load(QStringLiteral("qt_") + localSysName, options.resourceDir))
-            installTranslator(qtTranslator.take());
+    std::unique_ptr<QTranslator> designerTranslator(new QTranslator(this));
+    if (designerTranslator->load(QLocale(), QStringLiteral("designer"), QStringLiteral("_"), options.resourceDir)) {
+        installTranslator(designerTranslator.release());
+        std::unique_ptr<QTranslator> qtTranslator(new QTranslator(this));
+        if (qtTranslator->load(QLocale(), QStringLiteral("qt"), QStringLiteral("_"), options.resourceDir))
+            installTranslator(qtTranslator.release());
     }
 
     m_workbench = new QDesignerWorkbench();
@@ -252,7 +253,7 @@ QDesigner::ParseArgumentsResult QDesigner::parseCommandLineArguments()
 
     m_suppressNewFormShow = m_workbench->readInBackup();
 
-    if (!options.files.empty()) {
+    if (!options.files.isEmpty()) {
         const QStringList::const_iterator cend = options.files.constEnd();
         for (QStringList::const_iterator it = options.files.constBegin(); it != cend; ++it) {
             // Ensure absolute paths for recent file list to be unique

@@ -32,7 +32,8 @@
 
 #include <QtDesigner/abstractformwindow.h>
 
-#include <QtWidgets/qaction.h>
+#include <QtGui/qaction.h>
+
 #include <QtCore/qdebug.h>
 
 QT_BEGIN_NAMESPACE
@@ -73,7 +74,7 @@ QAction *SpacerTaskMenu::preferredEditAction() const
 
 QList<QAction*> SpacerTaskMenu::taskActions() const
 {
-    return QList<QAction*>();
+    return {};
 }
 
 QT_END_NAMESPACE

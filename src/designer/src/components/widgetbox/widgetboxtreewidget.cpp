@@ -43,13 +43,15 @@
 
 #include <QtUiPlugin/customwidget.h>
 
-#include <QtWidgets/qheaderview.h>
 #include <QtWidgets/qapplication.h>
-#include <QtWidgets/qtreewidget.h>
-#include <QtGui/qevent.h>
-#include <QtWidgets/qaction.h>
-#include <QtWidgets/qactiongroup.h>
+#include <QtWidgets/qheaderview.h>
 #include <QtWidgets/qmenu.h>
+#include <QtWidgets/qscrollbar.h>
+#include <QtWidgets/qtreewidget.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qactiongroup.h>
+#include <QtGui/qevent.h>
 
 #include <QtCore/qfile.h>
 #include <QtCore/qtimer.h>
@@ -160,7 +162,7 @@ void  WidgetBoxTreeWidget::restoreExpandedState()
     const auto &closedCategoryList = settings->value(groupKey + QLatin1String(widgetBoxExpandedKeyC), QStringList()).toStringList();
     const StringSet closedCategories(closedCategoryList.cbegin(), closedCategoryList.cend());
     expandAll();
-    if (closedCategories.empty())
+    if (closedCategories.isEmpty())
         return;
 
     if (const int numCategories = categoryCount()) {
@@ -303,7 +305,15 @@ bool WidgetBoxTreeWidget::load(QDesignerWidgetBox::LoadMode loadMode)
         return false;
 
     const QString contents = QString::fromUtf8(f.readAll());
-    return loadContents(contents);
+    if (!loadContents(contents))
+        return false;
+    if (topLevelItemCount() > 0) {
+        // QTBUG-93099: Set the single step to the item height to have some
+        // size-related value.
+        const auto itemHeight = visualItemRect(topLevelItem(0)).height();
+        verticalScrollBar()->setSingleStep(itemHeight);
+    }
+    return true;
 }
 
 bool WidgetBoxTreeWidget::loadContents(const QString &contents)
@@ -366,7 +376,7 @@ bool WidgetBoxTreeWidget::readCategories(const QString &fileName, const QString 
     while (!reader.atEnd()) {
         switch (reader.readNext()) {
         case QXmlStreamReader::StartElement: {
-            const QStringRef tag = reader.name();
+            const auto tag = reader.name();
             if (tag == QLatin1String(widgetBoxRootElementC)) {
                 //<widgetbox version="4.5">
                 continue;
@@ -411,7 +421,7 @@ bool WidgetBoxTreeWidget::readCategories(const QString &fileName, const QString 
             break;
         }
         case QXmlStreamReader::EndElement: {
-           const QStringRef tag = reader.name();
+           const auto tag = reader.name();
            if (tag == QLatin1String(widgetBoxRootElementC)) {
                continue;
            }
@@ -472,7 +482,7 @@ bool WidgetBoxTreeWidget::readWidget(Widget *w, const QString &xml, QXmlStreamRe
         case QXmlStreamReader::StartElement:
             if (nesting++ == 0) {
                 // First element must be <ui> or (legacy) <widget>
-                const QStringRef name = r.name();
+                const auto name = r.name();
                 if (name == QLatin1String(uiElementC)) {
                     startTagPosition = currentPosition;
                 } else {
@@ -593,9 +603,8 @@ static int findCategory(const QString &name, const WidgetBoxTreeWidget::Category
 static inline bool isValidIcon(const QIcon &icon)
 {
     if (!icon.isNull()) {
-        const QList<QSize> availableSizes = icon.availableSizes();
-        if (!availableSizes.empty())
-            return !availableSizes.front().isEmpty();
+        const auto availableSizes = icon.availableSizes();
+        return !availableSizes.isEmpty() && !availableSizes.constFirst().isEmpty();
     }
     return false;
 }
@@ -606,7 +615,7 @@ WidgetBoxTreeWidget::CategoryList WidgetBoxTreeWidget::loadCustomCategoryList() 
 
     const QDesignerPluginManager *pm = m_core->pluginManager();
     const QDesignerPluginManager::CustomWidgetList customWidgets = pm->registeredCustomWidgets();
-    if (customWidgets.empty())
+    if (customWidgets.isEmpty())
         return result;
 
     static const QString customCatName = tr("Custom Widgets");
@@ -967,7 +976,6 @@ void WidgetBoxTreeWidget::dropWidgets(const QList<QDesignerDnDItemInterface*> &i
 void WidgetBoxTreeWidget::filter(const QString &f)
 {
     const bool empty = f.isEmpty();
-    QRegExp re = empty ? QRegExp() : QRegExp(f, Qt::CaseInsensitive, QRegExp::FixedString);
     const int numTopLevels = topLevelItemCount();
     bool changed = false;
     for (int i = 0; i < numTopLevels; i++) {
@@ -975,7 +983,7 @@ void WidgetBoxTreeWidget::filter(const QString &f)
         WidgetBoxCategoryListView *categoryView = categoryViewAt(i);
         // Anything changed? -> Enable the category
         const int oldCount = categoryView->count(WidgetBoxCategoryListView::FilteredAccess);
-        categoryView->filter(re);
+        categoryView->filter(f, Qt::CaseInsensitive);
         const int newCount = categoryView->count(WidgetBoxCategoryListView::FilteredAccess);
         if (oldCount != newCount) {
             changed = true;

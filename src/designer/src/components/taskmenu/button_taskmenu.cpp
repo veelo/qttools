@@ -38,14 +38,16 @@
 #include <QtDesigner/abstractobjectinspector.h>
 #include <QtDesigner/abstractpropertyeditor.h>
 
-#include <QtWidgets/qaction.h>
-#include <QtWidgets/qactiongroup.h>
 #include <QtWidgets/qmenu.h>
 #include <QtWidgets/qstyle.h>
 #include <QtWidgets/qstyleoption.h>
 #include <QtWidgets/qabstractbutton.h>
 #include <QtWidgets/qbuttongroup.h>
 #include <QtWidgets/qapplication.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qactiongroup.h>
+
 #include <QtCore/qdebug.h>
 
 Q_DECLARE_METATYPE(QButtonGroup*)
@@ -211,7 +213,7 @@ CreateButtonGroupCommand::CreateButtonGroupCommand(QDesignerFormWindowInterface 
 
 bool CreateButtonGroupCommand::init(const ButtonList &bl)
 {
-    if (bl.empty())
+    if (bl.isEmpty())
         return false;
     QDesignerFormWindowInterface *fw = formWindow();
     QButtonGroup *buttonGroup = new QButtonGroup(fw->mainContainer());
@@ -286,9 +288,9 @@ RemoveButtonsFromGroupCommand::RemoveButtonsFromGroupCommand(QDesignerFormWindow
 
 bool RemoveButtonsFromGroupCommand::init(const ButtonList &bl)
 {
-    if (bl.empty())
+    if (bl.isEmpty())
         return false;
-    QButtonGroup *group = bl.front()->group();
+    QButtonGroup *group = bl.constFirst()->group();
     if (!group)
         return false;
     if (bl.size() >= group->buttons().size())
@@ -388,7 +390,7 @@ QRect ButtonTextTaskMenuInlineEditor::editRectangle() const
 {
     QWidget *w = widget();
     QStyleOptionButton opt;
-    opt.init(w);
+    opt.initFrom(w);
     return w->style()->subElementRect(QStyle::SE_PushButtonContents, &opt, w);
 }
 
@@ -411,7 +413,7 @@ QRect LinkDescriptionTaskMenuInlineEditor::editRectangle() const
 {
     QWidget *w = widget(); // TODO: What is the exact description area?
     QStyleOptionButton opt;
-    opt.init(w);
+    opt.initFrom(w);
     return w->style()->subElementRect(QStyle::SE_PushButtonContents, &opt, w);
 }
 
@@ -560,7 +562,7 @@ static ButtonList buttonList(const QDesignerFormWindowCursorInterface *cursor)
 static QUndoCommand *createRemoveButtonsCommand(QDesignerFormWindowInterface *fw, const ButtonList &bl)
 {
 
-    QButtonGroup *bg = bl.front()->group();
+    QButtonGroup *bg = bl.constFirst()->group();
     // Complete group or 1-member group?
     if (bl.size() >= bg->buttons().size() - 1) {
         BreakButtonGroupCommand *breakCmd = new BreakButtonGroupCommand(fw);
@@ -588,7 +590,7 @@ void ButtonTaskMenu::createGroup()
     const ButtonList bl = buttonList(fw->cursor());
     // Do we need to remove the buttons from an existing group?
     QUndoCommand *removeCmd = nullptr;
-    if (bl.front()->group()) {
+    if (bl.constFirst()->group()) {
         removeCmd = createRemoveButtonsCommand(fw, bl);
         if (!removeCmd)
             return;
@@ -651,7 +653,7 @@ void ButtonTaskMenu::addToGroup(QAction *a)
     const ButtonList bl = buttonList(fw->cursor());
     // Do we need to remove the buttons from an existing group?
     QUndoCommand *removeCmd = nullptr;
-    if (bl.front()->group()) {
+    if (bl.constFirst()->group()) {
         removeCmd = createRemoveButtonsCommand(fw, bl);
         if (!removeCmd)
             return;

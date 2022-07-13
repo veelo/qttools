@@ -49,7 +49,7 @@ static int usage(const QStringList &args)
 
     QString loaders;
     QString line(QLatin1String("    %1 - %2\n"));
-    foreach (Translator::FileFormat format, Translator::registeredFileFormats())
+    for (const Translator::FileFormat &format : qAsConst(Translator::registeredFileFormats()))
         loaders += line.arg(format.extension, -5).arg(format.description());
 
     std::cout << qPrintable(LC::tr("\nUsage:\n"
@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
     QTranslator translator;
     QTranslator qtTranslator;
     QString sysLocale = QLocale::system().name();
-    QString resourceDir = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
+    QString resourceDir = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
     if (translator.load(QLatin1String("linguist_") + sysLocale, resourceDir)
         && qtTranslator.load(QLatin1String("qt_") + sysLocale, resourceDir)) {
         app.installTranslator(&translator);

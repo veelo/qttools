@@ -38,9 +38,10 @@
 #include <QtDesigner/abstractwidgetbox.h>
 #include <QtDesigner/QDesignerComponents>
 
-#include <QtCore/qdebug.h>
-#include <QtWidgets/qaction.h>
+#include <QtGui/qaction.h>
 #include <QtGui/qevent.h>
+
+#include <QtCore/qdebug.h>
 
 enum { debugToolWindow = 0 };
 
@@ -171,7 +172,7 @@ PropertyEditorToolWindow::PropertyEditorToolWindow(QDesignerWorkbench *workbench
                         QStringLiteral("__qt_property_editor_action"),
                         Qt::RightDockWidgetArea)
 {
-    action()->setShortcut(Qt::CTRL + Qt::Key_I);
+    action()->setShortcut(Qt::CTRL | Qt::Key_I);
 
 }
 

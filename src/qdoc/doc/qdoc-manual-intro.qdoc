@@ -27,7 +27,6 @@
 
 /*!
     \page 01-qdoc-manual.html
-    \contentspage QDoc Manual
     \previouspage QDoc Manual
     \nextpage Command Index
 
@@ -89,7 +88,7 @@
 
     \section1 Running QDoc
 
-    The name of the QDoc program is \c {qdoc}. To run qdoc from the
+    The name of the QDoc program is \c {qdoc}. To run QDoc from the
     command line, give it the name of a configuration file:
 
     \quotation
@@ -161,7 +160,6 @@
      /Users/me/qt5/qttools/src/designer/src/designer/doc/qtdesigner.qdocconf
      /Users/me/qt5/qttools/src/linguist/linguist/doc/qtlinguist.qdocconf
      /Users/me/qt5/qtwebkit-examples/doc/qtwebkitexamples.qdocconf
-     /Users/me/qt5/qtimageformats/src/imageformats/doc/qtimageformats.qdocconf
      /Users/me/qt5/qtgraphicaleffects/src/effects/doc/qtgraphicaleffects.qdocconf
      /Users/me/qt5/qtscript/src/script/doc/qtscript.qdocconf
      /Users/me/qt5/qtscript/src/scripttools/doc/qtscripttools.qdocconf
@@ -206,7 +204,7 @@
     module's, that module is said to depend on those other Qt modules.
     Hence when QDoc runs the \e {generate phase} for that module, it
     must also load the index files for those modules so it can create
-    those thinks.
+    those links.
 
     Hence, when the Qt build system generates the Qt documentation, it
     first runs QDoc once for each module to perform the \e {prepare
@@ -285,7 +283,7 @@
 
     For each QDoc comment it finds, it searches the master tree for
     the item where the documentation belongs. Then it interprets the
-    qdoc commands in the comment and stores the interpreted commands
+    QDoc commands in the comment and stores the interpreted commands
     and the comment text in the tree node for the item.
 
     Finally, QDoc traverses the master tree. For each node, if the

@@ -38,6 +38,7 @@ class QObject;
 class QString;
 class QByteArray;
 class QUrl;
+class QWebEngineUrlSchemeHandler;
 
 // Provide helper functions for feeding the QtHelp data stored in the help database
 // into various browsers.
@@ -62,6 +63,10 @@ public:
 
     // Create an instance of QNetworkAccessManager for WebKit-type browsers.
     static QNetworkAccessManager *createNetworkAccessManager(QObject *parent = nullptr);
+
+#if defined(BROWSER_QTWEBENGINE)
+    static QWebEngineUrlSchemeHandler *createUrlSchemeHandler(QObject *parent = nullptr);
+#endif
 };
 
 QT_END_NAMESPACE

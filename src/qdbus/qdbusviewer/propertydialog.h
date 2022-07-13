@@ -38,14 +38,14 @@ class PropertyDialog: public QDialog
 {
     Q_OBJECT
 public:
-    explicit PropertyDialog(QWidget *parent = 0, Qt::WindowFlags f = 0);
+    explicit PropertyDialog(QWidget *parent = 0, Qt::WindowFlags f = {});
 
     void addProperty(const QString &name, int type);
     void setInfo(const QString &caption);
 
     QList<QVariant> values() const;
 
-    int exec();
+    int exec() override;
 
 private:
     QLabel *label;

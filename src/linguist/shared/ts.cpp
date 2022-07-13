@@ -30,8 +30,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QDebug>
-#include <QtCore/QRegExp>
-#include <QtCore/QTextCodec>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QTextStream>
 
 #include <QtCore/QXmlStreamReader>
@@ -191,7 +190,6 @@ bool TSReader::read(Translator &translator)
     STRING(catalog);
     STRING(comment);
     STRING(context);
-    STRING(defaultcodec);
     STRING(dependencies);
     STRING(dependency);
     STRING(extracomment);
@@ -250,11 +248,6 @@ bool TSReader::read(Translator &translator)
                     break;
                 } else if (isWhiteSpace()) {
                     // ignore these, just whitespace
-                } else if (elementStarts(strdefaultcodec)) {
-                    // <defaultcodec>
-                    readElementText();
-                    m_cd.appendError(QString::fromLatin1("Warning: ignoring <defaultcodec> element"));
-                    // </defaultcodec>
                 } else if (isStartElement()
                         && name().toString().startsWith(strextrans)) {
                     // <extra-...>
@@ -373,7 +366,7 @@ bool TSReader::read(Translator &translator)
                                 } else if (elementStarts(strtranslation)) {
                                     // <translation>
                                     QXmlStreamAttributes atts = attributes();
-                                    QStringRef type = atts.value(strtype);
+                                    QStringView type = atts.value(strtype);
                                     if (type == strunfinished)
                                         msg.setType(TranslatorMessage::Unfinished);
                                     else if (type == strvanished)
@@ -464,7 +457,7 @@ static QString protect(const QString &str)
             result += QLatin1String("&apos;");
             break;
         default:
-            if ((c < 0x20 || (ch > 0x7f && ch.isSpace())) && c != '\n' && c != '\t')
+            if ((c < 0x20 || (ch > QChar(0x7f) && ch.isSpace())) && c != '\n' && c != '\t')
                 result += numericEntity(c);
             else // this also covers surrogates
                 result += QChar(c);
@@ -474,19 +467,19 @@ static QString protect(const QString &str)
 }
 
 static void writeExtras(QTextStream &t, const char *indent,
-                        const TranslatorMessage::ExtraData &extras, QRegExp drops)
+                        const TranslatorMessage::ExtraData &extras, QRegularExpression drops)
 {
     QStringList outs;
-    for (Translator::ExtraData::ConstIterator it = extras.begin(); it != extras.end(); ++it) {
-        if (!drops.exactMatch(it.key())) {
+    for (auto it = extras.cbegin(), end = extras.cend(); it != end; ++it) {
+        if (!drops.match(it.key()).hasMatch()) {
             outs << (QStringLiteral("<extra-") + it.key() + QLatin1Char('>')
                      + protect(it.value())
                      + QStringLiteral("</extra-") + it.key() + QLatin1Char('>'));
         }
     }
     outs.sort();
-    foreach (const QString &out, outs)
-        t << indent << out << endl;
+    for (const QString &out : qAsConst(outs))
+        t << indent << out << Qt::endl;
 }
 
 static void writeVariants(QTextStream &t, const char *indent, const QString &input)
@@ -516,8 +509,6 @@ bool saveTS(const Translator &translator, QIODevice &dev, ConversionData &cd)
 {
     bool result = true;
     QTextStream t(&dev);
-    t.setCodec(QTextCodec::codecForName("UTF-8"));
-    //qDebug() << translator.codecName();
 
     // The xml prolog allows processors to easily detect the correct encoding
     t << "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE TS>\n";
@@ -532,21 +523,21 @@ bool saveTS(const Translator &translator, QIODevice &dev, ConversionData &cd)
         t << " sourcelanguage=\"" << languageCode << "\"";
     t << ">\n";
 
-    QStringList deps = translator.dependencies();
+    const QStringList deps = translator.dependencies();
     if (!deps.isEmpty()) {
         t << "<dependencies>\n";
-        foreach (const QString &dep, deps)
+        for (const QString &dep : deps)
             t << "<dependency catalog=\"" << dep << "\"/>\n";
         t << "</dependencies>\n";
     }
 
-    QRegExp drops(cd.dropTags().join(QLatin1Char('|')));
+    QRegularExpression drops(QRegularExpression::anchoredPattern(cd.dropTags().join(QLatin1Char('|'))));
 
     writeExtras(t, "    ", translator.extras(), drops);
 
     QHash<QString, QList<TranslatorMessage> > messageOrder;
     QList<QString> contextOrder;
-    foreach (const TranslatorMessage &msg, translator.messages()) {
+    for (const TranslatorMessage &msg : translator.messages()) {
         // no need for such noise
         if ((msg.type() == TranslatorMessage::Obsolete || msg.type() == TranslatorMessage::Vanished)
             && msg.translation().isEmpty()) {
@@ -563,12 +554,12 @@ bool saveTS(const Translator &translator, QIODevice &dev, ConversionData &cd)
 
     QHash<QString, int> currentLine;
     QString currentFile;
-    foreach (const QString &context, contextOrder) {
+    for (const QString &context : qAsConst(contextOrder)) {
         t << "<context>\n"
              "    <name>"
           << protect(context)
           << "</name>\n";
-        foreach (const TranslatorMessage &msg, messageOrder[context]) {
+        for (const TranslatorMessage &msg : qAsConst(messageOrder[context])) {
             //msg.dump();
 
                 t << "    <message";
@@ -580,7 +571,7 @@ bool saveTS(const Translator &translator, QIODevice &dev, ConversionData &cd)
                 if (translator.locationsType() != Translator::NoLocations) {
                     QString cfile = currentFile;
                     bool first = true;
-                    foreach (const TranslatorMessage::Reference &ref, msg.allReferences()) {
+                    for (const TranslatorMessage::Reference &ref : msg.allReferences()) {
                         QString fn = cd.m_targetDir.relativeFilePath(ref.fileName())
                                     .replace(QLatin1Char('\\'),QLatin1Char('/'));
                         int ln = ref.lineNumber();

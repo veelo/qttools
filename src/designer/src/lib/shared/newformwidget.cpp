@@ -49,10 +49,10 @@
 #include <QtCore/qtextstream.h>
 
 #include <QtWidgets/qapplication.h>
-#include <QtWidgets/qdesktopwidget.h>
 #include <QtWidgets/qheaderview.h>
 #include <QtWidgets/qtreewidget.h>
 #include <QtGui/qpainter.h>
+#include <QtGui/qscreen.h>
 #include <QtWidgets/qpushbutton.h>
 
 QT_BEGIN_NAMESPACE
@@ -129,8 +129,6 @@ NewFormWidget::NewFormWidget(QDesignerFormEditorInterface *core, QWidget *parent
     m_currentItem(nullptr),
     m_acceptedItem(nullptr)
 {
-    using DeviceProfileList = QList<qdesigner_internal::DeviceProfile>;
-
     m_ui->setupUi(this);
     m_ui->treeWidget->setItemDelegate(new qdesigner_internal::SheetDelegate(m_ui->treeWidget, this));
     m_ui->treeWidget->header()->hide();
@@ -181,14 +179,13 @@ NewFormWidget::NewFormWidget(QDesignerFormEditorInterface *core, QWidget *parent
     m_deviceProfiles = settings.deviceProfiles();
     m_ui->profileComboBox->addItem(tr("None"));
     connect(m_ui->profileComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            &QComboBox::currentIndexChanged,
             this, &NewFormWidget::slotDeviceProfileIndexChanged);
-    if (m_deviceProfiles.empty()) {
+    if (m_deviceProfiles.isEmpty()) {
         m_ui->profileComboBox->setEnabled(false);
     } else {
-        const DeviceProfileList::const_iterator dcend = m_deviceProfiles.constEnd();
-        for (DeviceProfileList::const_iterator it = m_deviceProfiles.constBegin(); it != dcend; ++it)
-            m_ui->profileComboBox->addItem(it->name());
+        for (const auto &deviceProfile : qAsConst(m_deviceProfiles))
+            m_ui->profileComboBox->addItem(deviceProfile.name());
         const int ci = settings.currentDeviceProfileIndex();
         if (ci >= 0)
             m_ui->profileComboBox->setCurrentIndex(ci + profileComboIndexOffset);
@@ -262,11 +259,11 @@ QPixmap  NewFormWidget::formPreviewPixmap(const QTreeWidgetItem *item)
         // file or string?
         const QVariant fileName = item->data(0, TemplateNameRole);
         QPixmap rc;
-        if (fileName.type() == QVariant::String) {
+        if (fileName.metaType().id() == QMetaType::QString) {
             rc = formPreviewPixmap(fileName.toString());
         } else {
             const QVariant classNameV = item->data(0, ClassNameRole);
-            Q_ASSERT(classNameV.type() == QVariant::String);
+            Q_ASSERT(classNameV.metaType().id() == QMetaType::QString);
             const QString className = classNameV.toString();
             QByteArray data =  qdesigner_internal::WidgetDataBase::formTemplate(m_core, className, formName(className)).toUtf8();
             QBuffer buffer(&data);
@@ -314,7 +311,7 @@ QImage NewFormWidget::grabForm(QDesignerFormEditorInterface *core,
 
 QPixmap NewFormWidget::formPreviewPixmap(QIODevice &file, const QString &workingDir) const
 {
-    const QSizeF screenSize(QApplication::desktop()->screenGeometry(this).size());
+    const QSizeF screenSize(screen()->geometry().size());
     const int previewSize = qRound(screenSize.width() / 7.5); // 256 on 1920px screens.
     const int margin = previewSize / 32 - 1; // 7 on 1920px screens.
     const int shadow = margin;
@@ -446,7 +443,7 @@ void NewFormWidget::loadFrom(const QString &path, bool resourceFile, const QStri
 void NewFormWidget::loadFrom(const QString &title, const QStringList &nameList,
                        const QString &selectedItem, QTreeWidgetItem *&selectedItemFound)
 {
-    if (nameList.empty())
+    if (nameList.isEmpty())
         return;
     QTreeWidgetItem *root = new QTreeWidgetItem(m_ui->treeWidget);
     root->setFlags(root->flags() & ~Qt::ItemIsSelectable);
@@ -495,7 +492,7 @@ QString NewFormWidget::itemToTemplate(const QTreeWidgetItem *item, QString *erro
     const QSize size = templateSize();
     // file name or string contents?
     const QVariant templateFileName = item->data(0, TemplateNameRole);
-    if (templateFileName.type() == QVariant::String) {
+    if (templateFileName.metaType().id() == QMetaType::QString) {
         const QString fileName = templateFileName.toString();
         // No fixed size: just open.
         if (size.isNull())

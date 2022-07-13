@@ -88,7 +88,7 @@ public:
     void appendTranslation(const QString &translation) { m_translations.append(translation); }
     bool isTranslated() const
     {
-        foreach (const QString &trans, m_translations)
+        for (const QString &trans : m_translations)
             if (!trans.isEmpty())
                 return true;
         return false;
@@ -150,7 +150,7 @@ private:
     bool m_plural;
 };
 
-Q_DECLARE_TYPEINFO(TranslatorMessage, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(TranslatorMessage, Q_RELOCATABLE_TYPE);
 
 QT_END_NAMESPACE
 

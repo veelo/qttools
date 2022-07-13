@@ -27,6 +27,7 @@
 ****************************************************************************/
 #include <QCoreApplication>
 #include <QDir>
+#include <QLibraryInfo>
 
 #include "../shared/shared.h"
 
@@ -42,19 +43,22 @@ int main(int argc, char **argv)
         qDebug() << "Usage: macdeployqt app-bundle [options]";
         qDebug() << "";
         qDebug() << "Options:";
-        qDebug() << "   -verbose=<0-3>     : 0 = no output, 1 = error/warning (default), 2 = normal, 3 = debug";
-        qDebug() << "   -no-plugins        : Skip plugin deployment";
-        qDebug() << "   -dmg               : Create a .dmg disk image";
-        qDebug() << "   -no-strip          : Don't run 'strip' on the binaries";
-        qDebug() << "   -use-debug-libs    : Deploy with debug versions of frameworks and plugins (implies -no-strip)";
-        qDebug() << "   -executable=<path> : Let the given executable use the deployed frameworks too";
-        qDebug() << "   -qmldir=<path>     : Scan for QML imports in the given path";
-        qDebug() << "   -qmlimport=<path>  : Add the given path to the QML module search locations";
-        qDebug() << "   -always-overwrite  : Copy files even if the target file exists";
-        qDebug() << "   -codesign=<ident>  : Run codesign with the given identity on all executables";
-        qDebug() << "   -appstore-compliant: Skip deployment of components that use private API";
-        qDebug() << "   -libpath=<path>    : Add the given path to the library search path";
-        qDebug() << "   -fs=<filesystem>   : Set the filesystem used for the .dmg disk image (defaults to HFS+)";
+        qDebug() << "   -verbose=<0-3>                : 0 = no output, 1 = error/warning (default), 2 = normal, 3 = debug";
+        qDebug() << "   -no-plugins                   : Skip plugin deployment";
+        qDebug() << "   -dmg                          : Create a .dmg disk image";
+        qDebug() << "   -no-strip                     : Don't run 'strip' on the binaries";
+        qDebug() << "   -use-debug-libs               : Deploy with debug versions of frameworks and plugins (implies -no-strip)";
+        qDebug() << "   -executable=<path>            : Let the given executable use the deployed frameworks too";
+        qDebug() << "   -qmldir=<path>                : Scan for QML imports in the given path";
+        qDebug() << "   -qmlimport=<path>             : Add the given path to the QML module search locations";
+        qDebug() << "   -always-overwrite             : Copy files even if the target file exists";
+        qDebug() << "   -codesign=<ident>             : Run codesign with the given identity on all executables";
+        qDebug() << "   -hardened-runtime             : Enable Hardened Runtime when code signing";
+        qDebug() << "   -timestamp                    : Include a secure timestamp when code signing (requires internet connection)";
+        qDebug() << "   -sign-for-notarization=<ident>: Activate the necessary options for notarization (requires internet connection)";
+        qDebug() << "   -appstore-compliant           : Skip deployment of components that use private API";
+        qDebug() << "   -libpath=<path>               : Add the given path to the library search path";
+        qDebug() << "   -fs=<filesystem>              : Set the filesystem used for the .dmg disk image (defaults to HFS+)";
         qDebug() << "";
         qDebug() << "macdeployqt takes an application bundle as input and makes it";
         qDebug() << "self-contained by copying in the Qt frameworks and plugins that";
@@ -96,8 +100,10 @@ int main(int argc, char **argv)
     QStringList qmlImportPaths;
     extern bool runCodesign;
     extern QString codesignIdentiy;
+    extern bool hardenedRuntime;
     extern bool appstoreCompliant;
     extern bool deployFramework;
+    extern bool secureTimestamp;
 
     for (int i = 2; i < argc; ++i) {
         QByteArray argument = QByteArray(argv[i]);
@@ -164,6 +170,23 @@ int main(int argc, char **argv)
                 runCodesign = true;
                 codesignIdentiy = argument.mid(index+1);
             }
+        } else if (argument.startsWith(QByteArray("-sign-for-notarization"))) {
+            LogDebug() << "Argument found:" << argument;
+            int index = argument.indexOf("=");
+            if (index < 0 || index >= argument.size()) {
+                LogError() << "Missing code signing identity";
+            } else {
+                runCodesign = true;
+                hardenedRuntime = true;
+                secureTimestamp = true;
+                codesignIdentiy = argument.mid(index+1);
+            }
+        } else if (argument.startsWith(QByteArray("-hardened-runtime"))) {
+            LogDebug() << "Argument found:" << argument;
+            hardenedRuntime = true;
+        } else if (argument.startsWith(QByteArray("-timestamp"))) {
+            LogDebug() << "Argument found:" << argument;
+            secureTimestamp = true;
         } else if (argument == QByteArray("-appstore-compliant")) {
             LogDebug() << "Argument found:" << argument;
             appstoreCompliant = true;
@@ -210,14 +233,34 @@ int main(int argc, char **argv)
         // Update deploymentInfo.deployedFrameworks - the QML imports
         // may have brought in extra frameworks as dependencies.
         deploymentInfo.deployedFrameworks += findAppFrameworkNames(appBundlePath);
-        deploymentInfo.deployedFrameworks = deploymentInfo.deployedFrameworks.toSet().toList();
+        deploymentInfo.deployedFrameworks =
+            QSet<QString>(deploymentInfo.deployedFrameworks.begin(),
+                          deploymentInfo.deployedFrameworks.end()).values();
     }
 
-    if (plugins && !deploymentInfo.qtPath.isEmpty()) {
-        deploymentInfo.pluginPath = deploymentInfo.qtPath + "/plugins";
-        LogNormal();
-        deployPlugins(appBundlePath, deploymentInfo, useDebugLibs);
-        createQtConf(appBundlePath);
+    // Handle plugins
+    if (plugins) {
+        // Set the plugins search directory
+        deploymentInfo.pluginPath = QLibraryInfo::path(QLibraryInfo::PluginsPath);
+
+        // Sanity checks
+        if (deploymentInfo.pluginPath.isEmpty()) {
+            LogError() << "Missing Qt plugins path\n";
+            return 1;
+        }
+
+        if (!QDir(deploymentInfo.pluginPath).exists()) {
+            LogError() << "Plugins path does not exist" << deploymentInfo.pluginPath << "\n";
+            return 1;
+        }
+
+        // Deploy plugins
+        Q_ASSERT(!deploymentInfo.pluginPath.isEmpty());
+        if (!deploymentInfo.pluginPath.isEmpty()) {
+            LogNormal();
+            deployPlugins(appBundlePath, deploymentInfo, useDebugLibs);
+            createQtConf(appBundlePath);
+        }
     }
 
     if (runStripEnabled)
@@ -233,4 +276,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-

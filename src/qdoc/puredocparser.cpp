@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2020 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -26,14 +26,14 @@
 **
 ****************************************************************************/
 
-#include <errno.h>
-#include "tokenizer.h"
-#include "qdocdatabase.h"
 #include "puredocparser.h"
 
-QT_BEGIN_NAMESPACE
+#include "qdocdatabase.h"
+#include "tokenizer.h"
 
-PureDocParser *PureDocParser::pureParser_ = nullptr;
+#include <cerrno>
+
+QT_BEGIN_NAMESPACE
 
 /*!
   Returns a list of the kinds of files that the pure doc
@@ -42,7 +42,10 @@ PureDocParser *PureDocParser::pureParser_ = nullptr;
  */
 QStringList PureDocParser::sourceFileNameFilter()
 {
-    return QStringList() << "*.qdoc" << "*.qtx" << "*.qtt" << "*.js";
+    return QStringList() << "*.qdoc"
+                         << "*.qtx"
+                         << "*.qtt"
+                         << "*.js";
 }
 
 /*!
@@ -50,20 +53,22 @@ QStringList PureDocParser::sourceFileNameFilter()
   parsed contents to the database. The \a location is used for
   reporting errors.
  */
-void PureDocParser::parseSourceFile(const Location& location, const QString& filePath)
+void PureDocParser::parseSourceFile(const Location &location, const QString &filePath)
 {
     QFile in(filePath);
     currentFile_ = filePath;
     if (!in.open(QIODevice::ReadOnly)) {
-        location.error(tr("Can't open source file '%1' (%2)").arg(filePath).arg(strerror(errno)));
+        location.error(QStringLiteral("Can't open source file '%1' (%2)")
+                               .arg(filePath)
+                               .arg(strerror(errno)));
         currentFile_.clear();
         return;
     }
 
     Location fileLocation(filePath);
     Tokenizer fileTokenizer(fileLocation, in);
-    tokenizer_ = &fileTokenizer;
-    tok_ = tokenizer_->getToken();
+    m_tokenizer = &fileTokenizer;
+    m_token = m_tokenizer->getToken();
 
     /*
       The set of open namespaces is cleared before parsing
@@ -83,24 +88,25 @@ void PureDocParser::parseSourceFile(const Location& location, const QString& fil
  */
 bool PureDocParser::processQdocComments()
 {
-    const QSet<QString>& commands = topicCommands() + metaCommands();
+    const QSet<QString> &commands = topicCommands() + metaCommands();
 
-    while (tok_ != Tok_Eoi) {
-        if (tok_ == Tok_Doc) {
-            QString comment = tokenizer_->lexeme(); // returns an entire qdoc comment.
-            Location start_loc(tokenizer_->location());
-            tok_ = tokenizer_->getToken();
+    while (m_token != Tok_Eoi) {
+        if (m_token == Tok_Doc) {
+            QString comment = m_tokenizer->lexeme(); // returns an entire qdoc comment.
+            Location start_loc(m_tokenizer->location());
+            m_token = m_tokenizer->getToken();
 
             Doc::trimCStyleComment(start_loc, comment);
-            Location end_loc(tokenizer_->location());
+            Location end_loc(m_tokenizer->location());
 
             // Doc constructor parses the comment.
             Doc doc(start_loc, end_loc, comment, commands, topicCommands());
-            const TopicList& topics = doc.topicsUsed();
+            const TopicList &topics = doc.topicsUsed();
             if (topics.isEmpty()) {
-                doc.location().warning(tr("This qdoc comment contains no topic command "
-                                          "(e.g., '\\%1', '\\%2').")
-                                       .arg(COMMAND_MODULE).arg(COMMAND_PAGE));
+                doc.location().warning(QStringLiteral("This qdoc comment contains no topic command "
+                                                      "(e.g., '\\%1', '\\%2').")
+                                               .arg(COMMAND_MODULE)
+                                               .arg(COMMAND_PAGE));
                 continue;
             }
             if (hasTooManyTopics(doc))
@@ -112,9 +118,8 @@ bool PureDocParser::processQdocComments()
 
             processTopicArgs(doc, topic, nodes, docs);
             processMetaCommands(nodes, docs);
-        }
-        else {
-            tok_ = tokenizer_->getToken();
+        } else {
+            m_token = m_tokenizer->getToken();
         }
     }
     return true;

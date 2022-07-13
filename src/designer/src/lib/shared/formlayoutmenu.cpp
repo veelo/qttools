@@ -41,13 +41,14 @@
 #include <QtDesigner/abstractwidgetdatabase.h>
 #include <QtDesigner/abstractlanguage.h>
 
-#include <QtWidgets/qaction.h>
 #include <QtWidgets/qwidget.h>
 #include <QtWidgets/qformlayout.h>
-#include <QtWidgets/qundostack.h>
 #include <QtWidgets/qdialog.h>
 #include <QtWidgets/qpushbutton.h>
+
+#include <QtGui/qaction.h>
 #include <QtGui/qvalidator.h>
+#include <QtGui/qundostack.h>
 
 #include <QtCore/qpair.h>
 #include <QtCore/qcoreapplication.h>
@@ -154,7 +155,7 @@ FormLayoutRowDialog::FormLayoutRowDialog(QDesignerFormEditorInterface *core,
     m_ui.fieldClassComboBox->addItems(fieldWidgetClasses(core));
     m_ui.fieldClassComboBox->setCurrentIndex(0);
     connect(m_ui.fieldClassComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            &QComboBox::currentIndexChanged,
             this, &FormLayoutRowDialog::fieldClassChanged);
 
     updateOkButton();
@@ -476,7 +477,7 @@ void FormLayoutMenu::populate(QWidget *w, QDesignerFormWindowInterface *fw, Acti
 {
     switch (LayoutInfo::managedLayoutType(fw->core(), w)) {
     case LayoutInfo::Form:
-        if (!actions.empty() && !actions.back()->isSeparator())
+        if (!actions.isEmpty() && !actions.constLast()->isSeparator())
             actions.push_back(m_separator1);
         actions.push_back(m_populateFormAction);
         actions.push_back(m_separator2);

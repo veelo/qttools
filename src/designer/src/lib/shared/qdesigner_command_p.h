@@ -40,20 +40,22 @@
 #ifndef QDESIGNER_COMMAND_H
 #define QDESIGNER_COMMAND_H
 
-#include "shared_global_p.h"
-#include "shared_enums_p.h"
 #include "layoutinfo_p.h"
-#include "qdesigner_utils_p.h"
-#include "qdesigner_formwindowcommand_p.h"
 #include "qdesigner_formeditorcommand_p.h"
+#include "qdesigner_formwindowcommand_p.h"
+#include "qdesigner_utils_p.h"
+#include "shared_enums_p.h"
+#include "shared_global_p.h"
 
 #include <QtDesigner/layoutdecoration.h>
 
 #include <QtGui/qicon.h>
+
+#include <QtCore/qhash.h>
+#include <QtCore/qlist.h>
+#include <QtCore/qmap.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qpair.h>
-#include <QtCore/qmap.h>
-#include <QtCore/qhash.h>
 #include <QtCore/qpoint.h>
 #include <QtCore/qrect.h>
 
@@ -179,7 +181,7 @@ private:
 // Helper to correctly unmanage a widget and its children for delete operations
 class  QDESIGNER_SHARED_EXPORT ManageWidgetCommandHelper {
 public:
-    using WidgetVector = QVector<QWidget *>;
+    using WidgetVector = QList<QWidget *>;
 
     ManageWidgetCommandHelper();
     void init(const QDesignerFormWindowInterface *fw, QWidget *widget);
@@ -752,7 +754,7 @@ protected:
     QPointer<QDockWidget> m_dockWidget;
 };
 
-class AddDockWidgetCommand: public QDesignerFormWindowCommand
+class QDESIGNER_SHARED_EXPORT AddDockWidgetCommand: public QDesignerFormWindowCommand
 {
 
 public:

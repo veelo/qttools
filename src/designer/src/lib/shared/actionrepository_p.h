@@ -82,6 +82,7 @@ public:
 
     QString actionName(int row) const;
     QAction *actionAt(const QModelIndex &index) const;
+    QModelIndex indexOf(QAction *a) const;
 
     QMimeData *mimeData(const QModelIndexList &indexes) const override;
     QStringList mimeTypes() const override;
@@ -124,7 +125,7 @@ public slots:
 signals:
     void actionContextMenuRequested(QContextMenuEvent *event, QAction *);
     void currentActionChanged(QAction *action);
-    void actionActivated(QAction *action);
+    void actionActivated(QAction *action, int column);
 
 protected slots:
     void currentChanged(const QModelIndex &current, const QModelIndex &previous) override;
@@ -211,11 +212,12 @@ public slots:
     void filter(const QString &text);
     void selectAll();
     void clearSelection();
+    void selectAction(QAction *a);
 
 signals:
     void contextMenuRequested(QContextMenuEvent *event, QAction *);
     void currentChanged(QAction *action);
-    void activated(QAction *action);
+    void activated(QAction *action, int column);
     void selectionChanged(const QItemSelection& selected, const QItemSelection& deselected);
     void resourceImageDropped(const QString &data, QAction *action);
 

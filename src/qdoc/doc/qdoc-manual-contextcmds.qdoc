@@ -28,7 +28,6 @@
 /*!
     \page 14-qdoc-commands-contextcommands.html
     \previouspage Topic Commands
-    \contentspage QDoc Manual
     \nextpage Document Navigation
 
     \title Context Commands
@@ -38,7 +37,8 @@
     \list
     \li Is this class thread-safe?
     \li Is this function reentrant?
-    \li Of which module is this class a member ?
+    \li Of which module is this class a member?
+    \li Which include statement is needed to use this class?
     \endlist
 
     Context commands can appear anywhere in a QDoc comment,
@@ -47,8 +47,8 @@
 
     \list
       \li \l {abstract-command} {\\abstract}
-      \li \l {contentspage-command}{\\contentspage},
       \li \l {ingroup-command}{\\ingroup},
+      \li \l {inheaderfile-command}{\\inheaderfile},
       \li \l {inherits-command}{\\inherits},
       \li \l {inmodule-command}{\\inmodule},
       \li \l {internal-command}{\\internal},
@@ -59,9 +59,12 @@
       \li \l {preliminary-command}{\\preliminary},
       \li \l {previouspage-command}{\\previouspage},
       \li \l {qmlabstract-command} {\\qmlabstract}
+      \li \l {qtcmakepackage-command} {\\qtcmakepackage}
+      \li \l {readonly-command} {\\readonly}
       \li \l {reentrant-command}{\\reentrant},
       \li \l {reimp-command}{\\reimp},
       \li \l {relates-command}{\\relates},
+      \li \l {required-command} {\\required}
       \li \l {since-command}{\\since},
       \li \l {startpage-command}{\\startpage},
       \li \l {subtitle-command}{\\subtitle}
@@ -74,7 +77,6 @@
 /*!
     \page 15-qdoc-commands-navigation.html
     \previouspage Context Commands
-    \contentspage QDoc Manual
     \nextpage Status
 
     \title Document Navigation
@@ -141,7 +143,7 @@
     \section2 \\previouspage
 
     The \\previouspage command links the current page to the previous
-    page in a sequence.a The command has two arguments, each enclosed
+    page in a sequence. The command has two arguments, each enclosed
     by curly braces: the first is the link target (the title of
     the previous page), the second is the link text. If the page's
     title is equivalent to the link text, the second argument can be
@@ -169,20 +171,11 @@
     documentation. The generated link type tells browsers and search
     engines which document is considered by the author to be the
     starting point of the collection.
-
-    \target contentspage-command
-    \section2 \\contentspage
-
-    The \\contentspage command links the current page to a table of
-    contents page. The command follows the same syntax and argument
-    convention as the \l {previouspage-command} {\\previouspage}
-    command.
 */
 
 /*!
     \page 16-qdoc-commands-status.html
     \previouspage Document Navigation
-    \contentspage QDoc Manual
     \nextpage Thread Support
 
     \title Status
@@ -228,14 +221,57 @@
         This property holds the changes to apply for this state.
         \default
 
-        By default these changes are applied against the default state. If the state
+        By default, these changes are applied against the default state. If the state
         extends another state, then the changes are applied against the state being
         extended.
     * /
     \endcode
 
     See how QDoc renders this property on the reference page for the
-    \l {State::changes}{State} type.
+    \l {QtQuick::State::changes}{State} type.
+
+    \target dontdocument-command
+    \section1 \\dontdocument
+
+    The \\dontdocument command is only used in a dontdocument.qdoc file
+    for a particular module. This file specifies publically declared
+    classes or structs that are not meant to be documented. QDoc will
+    not print warnings about missing \\class comments for these classes
+    and structs.
+
+    Below you will find the \\dontdocument command in the
+    dontdocument.qdoc for widgets:
+
+    \badcode
+    / *!
+       \dontdocument (QTypeInfo QMetaTypeId)
+    * /
+    \endcode
+
+    \target inheaderfile-command
+    \section1 \\inheaderfile
+
+    The \\inheaderfile meta-command is used for overriding the include statement
+    generated for a C++ class, namespace, or header file reference documentation.
+
+    By default, QDoc documents a \c {\class SomeClass} to be available with
+    a following include statement:
+
+    \code
+    #include <SomeClass>
+    \endcode
+
+    If the actual include statement differs from the default, this can be
+    documented as
+
+    \badcode
+    \class SomeClass
+    \inheaderfile Tools/SomeClass
+    ...
+    \endcode
+
+    See also \l {class-command}{\\class} and
+             \l {headerfile-command}{\\headerfile}.
 
     \target obsolete-command
     \section1 \\obsolete
@@ -244,7 +280,7 @@
     deprecated, and it should no longer be used in new code. There is
     no guarantee for how long it will remain in the library.
 
-    The command must stand on its own line.
+    The \\obsolete command takes no arguments.
 
     When generating the reference documentation for a class, QDoc will
     create and link to a separate page documenting its obsolete
@@ -316,7 +352,9 @@
     }
     \endcode
 
-    This function will not be included in the documentation.
+    This function will not be included in the documentation, unless QDoc
+    is called with the \c{-showinternal} command line option or the
+    \c{QDOC_SHOW_INTERNAL} environment variable is set.
 
     \target preliminary-command
     \section1 \\preliminary
@@ -373,6 +411,20 @@
        \endlist
     \endquotation
 
+    \target readonly-command
+    \section1 \\readonly
+
+    The \\readonly command is used in conjunction with a \l {qmlproperty-command}
+    {\\qmlproperty} command to mark the QML property as read-only.
+
+    \target required-command
+    \section1 \\required
+
+    The \\required command is used in conjunction with a \l {qmlproperty-command}
+    {\\qmlproperty} command to mark the QML property as required.
+
+    \b {See also} \l {The Property System}.
+
     \target since-command
     \section1 \\since
 
@@ -423,7 +475,6 @@
 /*!
     \page 17-qdoc-commands-thread.html
     \previouspage Status
-    \contentspage QDoc Manual
     \nextpage Relating Things
 
     \title Thread Support
@@ -603,7 +654,6 @@
 /*!
     \page 18-qdoc-commands-relating.html
     \previouspage Thread Support
-    \contentspage QDoc Manual
     \nextpage Grouping Things
 
     \title Relating Things
@@ -654,11 +704,11 @@
     \endcode
 
     QDoc includes this line on the reference page for the
-    \l{http://qt-project.org/doc/qt-4.7/qml-pauseanimation.html} {PauseAnimation}
+    \l [QML] PauseAnimation
     element:
 
     \quotation
-        Inherits \l{http://qt-project.org/doc/qt-4.7/qml-animation.html} {Animation}
+        Inherits \l [QML] Animation
     \endquotation
 
     \target overload-command
@@ -675,9 +725,9 @@
     should be fully documented. Each overload can have whatever extra
     documentation you want to add for just that overloaded version.
 
-    From Qt 4.5, you can include the function name plus '()' as a
-    parameter to the \b{\\overload} command, which will include a
-    standard \e{This function overloads...}  line of text with a link
+    You can include the function name plus '()' as a parameter to
+    the \b{\\overload} command, which will include a standard
+    \e{This function overloads...}  line of text with a link
     to the documentation for the primary version of the function.
 
     \code
@@ -790,7 +840,6 @@
 /*!
     \page 19-qdoc-commands-grouping.html
     \previouspage Relating Things
-    \contentspage QDoc Manual
     \nextpage Naming Things
 
     \title Grouping Things
@@ -872,7 +921,6 @@
 /*!
     \page 20-qdoc-commands-namingthings.html
     \previouspage Grouping Things
-    \contentspage QDoc Manual
     \nextpage Markup Commands
 
     \title Naming Things

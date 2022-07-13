@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2019 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -40,44 +40,48 @@
 #ifndef CLANGCODEPARSER_H
 #define CLANGCODEPARSER_H
 
-#include <QTemporaryDir>
-
 #include "cppcodeparser.h"
+
+#include <QtCore/qtemporarydir.h>
+
+typedef struct CXTranslationUnitImpl *CXTranslationUnit;
 
 QT_BEGIN_NAMESPACE
 
 class ClangCodeParser : public CppCodeParser
 {
-    Q_DECLARE_TR_FUNCTIONS(QDoc::ClangCodeParser)
-
 public:
-    ~ClangCodeParser();
+    ~ClangCodeParser() override;
 
-    void initializeParser(const Config& config) override;
+    void initializeParser() override;
     void terminateParser() override;
     QString language() override;
     QStringList headerFileNameFilter() override;
     QStringList sourceFileNameFilter() override;
-    void parseHeaderFile(const Location& location, const QString& filePath) override;
-    void parseSourceFile(const Location& location, const QString& filePath) override;
+    void parseHeaderFile(const Location &location, const QString &filePath) override;
+    void parseSourceFile(const Location &location, const QString &filePath) override;
     void precompileHeaders() override;
     Node *parseFnArg(const Location &location, const QString &fnArg) override;
-
- private:
-    void getDefaultArgs();
-    bool getMoreArgs();
-    void buildPCH();
+    static const QByteArray &fn() { return s_fn; }
 
 private:
-    int printParsingErrors_;
-    QString version_;
-    QHash<QString, QString> allHeaders_; // file name->path
-    QVector<QByteArray> includePaths_;
-    QScopedPointer<QTemporaryDir> pchFileDir_;
-    QByteArray pchName_;
-    QVector<QByteArray> defines_;
-    std::vector<const char *> args_;
-    QVector<QByteArray> moreArgs_;
+    void getDefaultArgs(); // FIXME: Clean up API
+    void getMoreArgs(); // FIXME: Clean up API
+
+    void buildPCH();
+
+    void printDiagnostics(const CXTranslationUnit &translationUnit) const;
+
+    QString m_version {};
+    QHash<QString, QString> m_allHeaders {}; // file name->path
+    QList<QByteArray> m_includePaths {};
+    QScopedPointer<QTemporaryDir> m_pchFileDir {};
+    QByteArray m_pchName {};
+    QList<QByteArray> m_defines {};
+    std::vector<const char *> m_args {};
+    QList<QByteArray> m_moreArgs {};
+    QStringList m_namespaceScope {};
+    static QByteArray s_fn;
 };
 
 QT_END_NAMESPACE

@@ -39,7 +39,7 @@ class tst_lrelease : public QObject
 
 public:
     tst_lrelease()
-         : lrelease(QLibraryInfo::location(QLibraryInfo::BinariesPath) + "/lrelease")
+         : lrelease(QLibraryInfo::path(QLibraryInfo::BinariesPath) + "/lrelease")
          , dataDir(QFINDTESTDATA("testdata/"))
     {}
 
@@ -51,6 +51,7 @@ private slots:
     void idbased();
     void markuntranslated();
     void dupes();
+    void noTranslations();
 
 private:
     void doCompare(const QStringList &actual, const QString &expectedFn);
@@ -75,14 +76,14 @@ void tst_lrelease::doCompare(const QStringList &actual, const QString &expectedF
         } else if (i == ei) {
             ei = 0;
             break;
-        } else if (!QRegExp(expected.at(i)).exactMatch(actual.at(i))) {
+        } else if (!QRegularExpression(QRegularExpression::anchoredPattern(expected.at(i))).match(actual.at(i)).hasMatch()) {
             while ((ei - 1) >= i && (gi - 1) >= i &&
-                     (QRegExp(expected.at(ei - 1)).exactMatch(actual.at(gi - 1))))
+                     (QRegularExpression(QRegularExpression::anchoredPattern(expected.at(ei - 1))).match(actual.at(gi - 1))).hasMatch())
                 ei--, gi--;
             break;
         }
     }
-    QByteArray diff;
+    QString diff;
     for (int j = qMax(0, i - 3); j < i; j++)
         diff += expected.at(j) + '\n';
     diff += "<<<<<<< got\n";
@@ -205,6 +206,17 @@ void tst_lrelease::dupes()
     QVERIFY(proc.waitForFinished());
     QVERIFY(proc.exitStatus() == QProcess::NormalExit);
     doCompare(QString(proc.readAllStandardError()).trimmed().split('\n'), dataDir + "dupes.errors");
+}
+
+void tst_lrelease::noTranslations()
+{
+    QProcess proc;
+    proc.start(lrelease, { dataDir + "no-translations.pro" });
+    QVERIFY(proc.waitForFinished());
+    QCOMPARE(proc.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(proc.exitCode(), 0);
+    auto stderrOutput = proc.readAllStandardError();
+    QVERIFY(stderrOutput.contains("lrelease warning: Met no 'TRANSLATIONS' entry in project file"));
 }
 
 QTEST_MAIN(tst_lrelease)

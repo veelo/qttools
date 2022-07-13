@@ -42,7 +42,6 @@
 
 #include <QtWidgets/qtoolbutton.h>
 #include <QtWidgets/qcombobox.h>
-#include <QtWidgets/qaction.h>
 #include <QtWidgets/qdialogbuttonbox.h>
 #include <QtWidgets/qpushbutton.h>
 #include <QtWidgets/qdialog.h>
@@ -53,9 +52,12 @@
 #include <QtWidgets/qdialogbuttonbox.h>
 #include <QtWidgets/qlineedit.h>
 #include <QtWidgets/qlabel.h>
-#include <QtGui/qvalidator.h>
-#include <QtCore/qdebug.h>
 
+#include <QtGui/qaction.h>
+#include <QtGui/qvalidator.h>
+
+#include <QtCore/qdebug.h>
+#include <QtCore/qlist.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -329,7 +331,7 @@ bool IconSelector::checkPixmap(const QString &fileName, CheckMode cm, QString *e
 static QString imageFilter()
 {
     QString filter = QApplication::translate("IconSelector", "All Pixmaps (");
-    const QList<QByteArray> supportedImageFormats = QImageReader::supportedImageFormats();
+    const auto supportedImageFormats = QImageReader::supportedImageFormats();
     const QString jpeg = QStringLiteral("JPEG");
     const int count = supportedImageFormats.count();
     for (int i = 0; i< count; ++i) {
@@ -590,8 +592,7 @@ void IconThemeEditor::updatePreview(const QString &t)
 {
     // Update preview label with icon.
     if (t.isEmpty() || !QIcon::hasThemeIcon(t)) { // Empty
-        const QPixmap *currentPixmap = d->m_themeLabel->pixmap();
-        if (currentPixmap == nullptr || currentPixmap->cacheKey() != d->m_emptyPixmap.cacheKey())
+        if (d->m_themeLabel->pixmap(Qt::ReturnByValue).cacheKey() != d->m_emptyPixmap.cacheKey())
             d->m_themeLabel->setPixmap(d->m_emptyPixmap);
     } else {
         const QIcon icon = QIcon::fromTheme(t);

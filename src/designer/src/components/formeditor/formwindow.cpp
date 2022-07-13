@@ -72,28 +72,31 @@
 
 #include <abstractdialoggui_p.h>
 
-#include <QtCore/qdebug.h>
-#include <QtCore/qbuffer.h>
-#include <QtCore/qtimer.h>
-#include <QtCore/qxmlstream.h>
 #include <QtWidgets/qmenu.h>
-#include <QtWidgets/qaction.h>
-#include <QtWidgets/qactiongroup.h>
-#if QT_CONFIG(clipboard)
-#include <QtGui/qclipboard.h>
-#endif
-#include <QtWidgets/qundogroup.h>
 #include <QtWidgets/qscrollarea.h>
 #include <QtWidgets/qrubberband.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qsplitter.h>
-#include <QtGui/qpainter.h>
 #include <QtWidgets/qgroupbox.h>
 #include <QtWidgets/qdockwidget.h>
 #include <QtWidgets/qtoolbox.h>
 #include <QtWidgets/qstackedwidget.h>
 #include <QtWidgets/qtabwidget.h>
 #include <QtWidgets/qbuttongroup.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qactiongroup.h>
+#if QT_CONFIG(clipboard)
+#  include <QtGui/qclipboard.h>
+#endif
+#include <QtGui/qpainter.h>
+#include <QtGui/qundogroup.h>
+
+#include <QtCore/qdebug.h>
+#include <QtCore/qbuffer.h>
+#include <QtCore/qtimer.h>
+#include <QtCore/qlist.h>
+#include <QtCore/qxmlstream.h>
 
 Q_DECLARE_METATYPE(QWidget*)
 
@@ -178,7 +181,7 @@ FormWindow::Selection::~Selection()
 
 void FormWindow::Selection::clear()
 {
-    if (!m_usedSelections.empty()) {
+    if (!m_usedSelections.isEmpty()) {
         for (auto it = m_usedSelections.begin(), mend = m_usedSelections.end(); it != mend; ++it)
             it.value()->setWidget(nullptr);
         m_usedSelections.clear();
@@ -595,21 +598,21 @@ bool FormWindow::handleMousePressEvent(QWidget * widget, QWidget *managedWidget,
         core()->formWindowManager()->setActiveFormWindow(this);
 
     const Qt::MouseButtons buttons = e->buttons();
-    if (buttons != Qt::LeftButton && buttons != Qt::MidButton)
+    if (buttons != Qt::LeftButton && buttons != Qt::MiddleButton)
         return true;
 
-    m_startPos = mapFromGlobal(e->globalPos());
+    m_startPos = mapFromGlobal(e->globalPosition().toPoint());
 
     if (debugFormWindow)
         qDebug() << "handleMousePressEvent:" <<  widget << ',' << managedWidget;
 
-    if (buttons == Qt::MidButton || isMainContainer(managedWidget)) { // press was on the formwindow
+    if (buttons == Qt::MiddleButton || isMainContainer(managedWidget)) { // press was on the formwindow
         clearObjectInspectorSelection(m_core);  // We might have a toolbar or non-widget selected in the object inspector.
         clearSelection(false);
 
         m_mouseState = MouseDrawRubber;
         m_currRect = QRect();
-        startRectDraw(mapFromGlobal(e->globalPos()), this, Rubber);
+        startRectDraw(mapFromGlobal(e->globalPosition().toPoint()), this, Rubber);
         return true;
     }
     if (buttons != Qt::LeftButton)
@@ -660,7 +663,7 @@ bool FormWindow::handleMouseMoveEvent(QWidget *, QWidget *, QMouseEvent *e)
     if (m_startPos.isNull())
         return true;
 
-    const QPoint pos = mapFromGlobal(e->globalPos());
+    const QPoint pos = mapFromGlobal(e->globalPosition().toPoint());
 
     switch (m_mouseState) {
     case MouseDrawRubber:  // Rubber band with left/middle mouse
@@ -684,6 +687,7 @@ bool FormWindow::handleMouseMoveEvent(QWidget *, QWidget *, QMouseEvent *e)
     const bool blocked = blockSelectionChanged(true);
 
     QWidgetList sel = selectedWidgets();
+    const QWidgetList originalSelection = sel;
     simplifySelection(&sel);
 
     QSet<QWidget*> widget_set;
@@ -733,9 +737,14 @@ bool FormWindow::handleMouseMoveEvent(QWidget *, QWidget *, QMouseEvent *e)
         }
     }
 
+    // In case when we have reduced the selection (by calling simplifySelection()
+    // beforehand) we still need to hide selection handles for children widgets
+    for (auto *widget : originalSelection)
+        m_selection->hide(widget);
+
     blockSelectionChanged(blocked);
 
-    if (!sel.empty()) // reshow selection?
+    if (!sel.isEmpty()) // reshow selection?
         if (QDesignerMimeData::execDrag(item_list, core()->topLevel()) == Qt::IgnoreAction && dropType == QDesignerDnDItemInterface::MoveDrop)
             for (QWidget *widget : qAsConst(sel))
                 m_selection->show(widget);
@@ -781,7 +790,7 @@ bool FormWindow::handleMouseReleaseEvent(QWidget *w, QWidget *mw, QMouseEvent *e
      * MousePressEvent. */
     switch (e->button()) {
     case Qt::LeftButton:
-    case Qt::MidButton:
+    case Qt::MiddleButton:
     case Qt::RightButton:
         emitSelectionChanged();
         break;
@@ -940,7 +949,7 @@ bool FormWindow::isMainContainer(const QWidget *w) const
 void FormWindow::updateChildSelections(QWidget *w)
 {
     const QWidgetList l = w->findChildren<QWidget*>();
-    if (!l.empty()) {
+    if (!l.isEmpty()) {
         const QWidgetList::const_iterator lcend = l.constEnd();
         for (QWidgetList::const_iterator it = l.constBegin(); it != lcend; ++it) {
             QWidget *w = *it;
@@ -1150,19 +1159,19 @@ bool FormWindow::unify(QObject *w, QString &s, bool changeIt)
 
     const QDesignerMetaDataBaseInterface *metaDataBase = core()->metaDataBase();
     const QWidgetList widgetChildren = main->findChildren<QWidget*>();
-    if (!widgetChildren.empty())
+    if (!widgetChildren.isEmpty())
         insertNames(metaDataBase, widgetChildren.constBegin(), widgetChildren.constEnd(), w, existingNames);
 
-    const QList<QLayout *> layoutChildren = main->findChildren<QLayout*>();
-    if (!layoutChildren.empty())
+    const auto layoutChildren = main->findChildren<QLayout*>();
+    if (!layoutChildren.isEmpty())
         insertNames(metaDataBase, layoutChildren.constBegin(), layoutChildren.constEnd(), w, existingNames);
 
-    const QList<QAction *> actionChildren = main->findChildren<QAction*>();
-    if (!actionChildren.empty())
+    const auto actionChildren = main->findChildren<QAction*>();
+    if (!actionChildren.isEmpty())
         insertNames(metaDataBase, actionChildren.constBegin(), actionChildren.constEnd(), w, existingNames);
 
-    const QList<QButtonGroup *> buttonGroupChildren = main->findChildren<QButtonGroup*>();
-    if (!buttonGroupChildren.empty())
+    const auto buttonGroupChildren = main->findChildren<QButtonGroup*>();
+    if (!buttonGroupChildren.isEmpty())
         insertNames(metaDataBase, buttonGroupChildren.constBegin(), buttonGroupChildren.constEnd(), w, existingNames);
 
     const StringSet::const_iterator enEnd = existingNames.constEnd();
@@ -1223,8 +1232,19 @@ void FormWindow::insertWidget(QWidget *w, const QRect &rect, QWidget *container,
 
     m_undoStack.push(geom_cmd);
 
-    InsertWidgetCommand *cmd = new InsertWidgetCommand(this);
-    cmd->init(w, already_in_form);
+    QUndoCommand *cmd = nullptr;
+    if (auto dockWidget = qobject_cast<QDockWidget *>(w)) {
+        if (auto mainWindow = qobject_cast<QMainWindow *>(container)) {
+            auto addDockCmd = new AddDockWidgetCommand(this);
+            addDockCmd->init(mainWindow, dockWidget);
+            cmd = addDockCmd;
+        }
+    }
+    if (cmd == nullptr) {
+        auto insertCmd = new InsertWidgetCommand(this);
+        insertCmd->init(w, already_in_form);
+        cmd = insertCmd;
+    }
     m_undoStack.push(cmd);
 
     endCommand();
@@ -1695,7 +1715,7 @@ QWidget *FormWindow::containerForPaste() const
         // Try to find a close parent, for example a non-laid-out
         // QFrame/QGroupBox when a widget within it is selected.
         QWidgetList selection = selectedWidgets();
-        if (selection.empty())
+        if (selection.isEmpty())
             break;
         simplifySelection(&selection);
 
@@ -1779,6 +1799,7 @@ static inline QString pasteCommandDescription(int widgetCount, int actionCount)
     return FormWindow::tr("Paste (%1 widgets, %2 actions)").arg(widgetCount).arg(actionCount);
 }
 
+#if QT_CONFIG(clipboard)
 static void positionPastedWidgetsAtMousePosition(FormWindow *fw, const QPoint &contextMenuPosition, QWidget *parent, const QWidgetList &l)
 {
     // Try to position pasted widgets at mouse position (current mouse position for Ctrl-V or position of context menu)
@@ -1811,7 +1832,6 @@ static void positionPastedWidgetsAtMousePosition(FormWindow *fw, const QPoint &c
         (*it)->move((*it)->pos() + offset);
 }
 
-#if QT_CONFIG(clipboard)
 void FormWindow::paste(PasteMode pasteMode)
 {
     // Avoid QDesignerResource constructing widgets that are not used as
@@ -2252,7 +2272,7 @@ QAction *FormWindow::createSelectAncestorSubMenu(QWidget *w)
     for (QWidget *p = w->parentWidget(); p && p != mc; p = p->parentWidget())
         if (isManaged(p) && !isWidgetSelected(p))
             parents.push_back(p);
-    if (parents.empty())
+    if (parents.isEmpty())
         return nullptr;
     // Create a submenu listing the managed, unselected parents
     QMenu *menu = new QMenu;
@@ -2296,11 +2316,15 @@ QMenu *FormWindow::createPopupMenu(QWidget *w)
             popup->addAction(manager->action(QDesignerFormWindowManagerInterface::RaiseAction));
             popup->addSeparator();
         }
+#if QT_CONFIG(clipboard)
         popup->addAction(manager->action(QDesignerFormWindowManagerInterface::CutAction));
         popup->addAction(manager->action(QDesignerFormWindowManagerInterface::CopyAction));
+#endif
     }
 
+#if QT_CONFIG(clipboard)
     popup->addAction(manager->action(QDesignerFormWindowManagerInterface::PasteAction));
+#endif
 
     if (QAction *selectAncestorAction = createSelectAncestorSubMenu(w))
         popup->addAction(selectAncestorAction);
@@ -2413,8 +2437,7 @@ void FormWindow::simplifySelection(QWidgetList *sel) const
         sel->push_back(mainC);
         return;
     }
-    using WidgetVector = QVector<QWidget *>;
-    WidgetVector toBeRemoved;
+    QWidgetList toBeRemoved;
     toBeRemoved.reserve(sel->size());
     const QWidgetList::const_iterator scend = sel->constEnd();
     for (QWidgetList::const_iterator it = sel->constBegin(); it != scend; ++it) {
@@ -2433,8 +2456,8 @@ void FormWindow::simplifySelection(QWidgetList *sel) const
     // Now we can actually remove the widgets that were marked
     // for removal in the previous pass.
     if (!toBeRemoved.isEmpty()) {
-        const WidgetVector::const_iterator rcend = toBeRemoved.constEnd();
-        for (WidgetVector::const_iterator it = toBeRemoved.constBegin(); it != rcend; ++it)
+        const QWidgetList::const_iterator rcend = toBeRemoved.constEnd();
+        for (QWidgetList::const_iterator it = toBeRemoved.constBegin(); it != rcend; ++it)
             sel->removeAll(*it);
     }
 }

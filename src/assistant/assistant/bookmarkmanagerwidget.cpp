@@ -31,15 +31,16 @@
 #include "tracer.h"
 #include "xbelsupport.h"
 
+#include <QtWidgets/QFileDialog>
+#include <QtWidgets/QMessageBox>
+
+#include <QtGui/QCloseEvent>
+#include <QtGui/QKeySequence>
+#include <QtGui/QShortcut>
+
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QUrl>
-
-#include <QtGui/QCloseEvent>
-#include <QtWidgets/QFileDialog>
-#include <QtGui/QKeySequence>
-#include <QtWidgets/QMessageBox>
-#include <QtWidgets/QShortcut>
 
 QT_BEGIN_NAMESPACE
 
@@ -143,13 +144,13 @@ bool BookmarkManagerWidget::eventFilter(QObject *object, QEvent *event)
     if (event->type() == QEvent::KeyPress) {
         QKeyEvent *ke = static_cast<QKeyEvent*>(event);
         switch (ke->key()) {
-            case Qt::Key_F2: {
+            case Qt::Key_F2:
                 renameItem(ui.treeView->currentIndex());
-            }   break;
+                break;
 
-            case Qt::Key_Delete: {
+            case Qt::Key_Delete:
                 removeItem(ui.treeView->currentIndex());
-            }   break;
+                break;
 
             default: break;
         }
@@ -158,14 +159,14 @@ bool BookmarkManagerWidget::eventFilter(QObject *object, QEvent *event)
     if (event->type() == QEvent::MouseButtonRelease) {
         QMouseEvent *me = static_cast<QMouseEvent*>(event);
         switch (me->button()) {
-            case Qt::LeftButton: {
+            case Qt::LeftButton:
                 if (me->modifiers() & Qt::ControlModifier)
                     setSourceFromIndex(ui.treeView->currentIndex(), true);
-            }   break;
+                break;
 
-            case Qt::MidButton: {
+            case Qt::MiddleButton:
                 setSourceFromIndex(ui.treeView->currentIndex(), true);
-            }   break;
+                break;
 
             default: break;
         }

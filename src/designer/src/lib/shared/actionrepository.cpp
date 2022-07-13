@@ -35,16 +35,17 @@
 #include <QtDesigner/propertysheet.h>
 #include <QtDesigner/qextensionmanager.h>
 
-#include <QtGui/qdrag.h>
-#include <QtGui/qevent.h>
-#include <QtGui/qstandarditemmodel.h>
 #include <QtWidgets/qtoolbutton.h>
-#include <QtGui/qpixmap.h>
-#include <QtWidgets/qaction.h>
 #include <QtWidgets/qheaderview.h>
 #include <QtWidgets/qtoolbar.h>
 #include <QtWidgets/qmenu.h>
+
+#include <QtGui/qpixmap.h>
+#include <QtGui/qaction.h>
+#include <QtGui/qdrag.h>
 #include <QtGui/qevent.h>
+#include <QtGui/qstandarditemmodel.h>
+
 #include <QtCore/qset.h>
 #include <QtCore/qdebug.h>
 
@@ -107,7 +108,7 @@ void ActionModel::update(int row)
     for (int i = 0; i < NumColumns; i++)
        list += item(row, i);
 
-    setItems(m_core, actionOfItem(list.front()), m_emptyIcon, list);
+    setItems(m_core, actionOfItem(list.constFirst()), m_emptyIcon, list);
 }
 
 void ActionModel::remove(int row)
@@ -132,7 +133,7 @@ QModelIndex ActionModel::addAction(QAction *action)
     }
     setItems(m_core, action, m_emptyIcon, items);
     appendRow(items);
-    return indexFromItem(items.front());
+    return indexFromItem(items.constFirst());
 }
 
 // Find the associated menus and toolbars, ignore toolbuttons
@@ -190,7 +191,7 @@ void  ActionModel::setItems(QDesignerFormEditorInterface *core, QAction *action,
     item->setWhatsThis(firstTooltip);
     // Used
     const QWidgetList associatedDesignerWidgets = associatedWidgets(action);
-    const bool used = !associatedDesignerWidgets.empty();
+    const bool used = !associatedDesignerWidgets.isEmpty();
     item = sl[UsedColumn];
     item->setCheckState(used ? Qt::Checked : Qt::Unchecked);
     if (used) {
@@ -276,6 +277,16 @@ QAction *ActionModel::actionAt(const  QModelIndex &index) const
     return actionOfItem(i);
 }
 
+QModelIndex ActionModel::indexOf(QAction *a) const
+{
+    for (int r = rowCount() - 1; r >= 0; --r) {
+        QStandardItem *stdItem = item(r, 0);
+        if (actionOfItem(stdItem) == a)
+            return indexFromItem(stdItem);
+    }
+    return {};
+}
+
 // helpers
 
 static bool handleImageDragEnterMoveEvent(QDropEvent *event)
@@ -291,7 +302,7 @@ static bool handleImageDragEnterMoveEvent(QDropEvent *event)
 
 static void handleImageDropEvent(const QAbstractItemView *iv, QDropEvent *event, ActionModel *am)
 {
-    const QModelIndex index = iv->indexAt(event->pos());
+    const QModelIndex index = iv->indexAt(event->position().toPoint());
     if (!index.isValid()) {
         event->ignore();
         return;
@@ -308,14 +319,14 @@ static void handleImageDropEvent(const QAbstractItemView *iv, QDropEvent *event,
 
 void startActionDrag(QWidget *dragParent, ActionModel *model, const QModelIndexList &indexes, Qt::DropActions supportedActions)
 {
-    if (indexes.empty())
+    if (indexes.isEmpty())
         return;
 
     QDrag *drag = new QDrag(dragParent);
     QMimeData *data = model->mimeData(indexes);
     drag->setMimeData(data);
     if (ActionRepositoryMimeData *actionMimeData = qobject_cast<ActionRepositoryMimeData *>(data))
-        drag->setPixmap(ActionRepositoryMimeData::actionDragPixmap(actionMimeData->actionList().front()));
+        drag->setPixmap(ActionRepositoryMimeData::actionDragPixmap(actionMimeData->actionList().constFirst()));
 
     drag->exec(supportedActions);
 }
@@ -392,7 +403,7 @@ void ActionTreeView::currentChanged(const QModelIndex &current, const QModelInde
 
 void ActionTreeView::slotActivated(const QModelIndex &index)
 {
-    emit actionActivated(m_model->actionAt(index));
+    emit actionActivated(m_model->actionAt(index), index.column());
 }
 
 void ActionTreeView::startDrag(Qt::DropActions supportedActions)
@@ -499,7 +510,8 @@ ActionView::ActionView(QWidget *parent) :
 
     // make it possible for vs integration to reimplement edit action dialog
     // [which it shouldn't do actually]
-    connect(m_actionListView, &ActionListView::actionActivated, this, &ActionView::activated);
+    connect(m_actionListView, &ActionListView::actionActivated,
+            this, [this](QAction *a) { this->activated(a, -1); });
     connect(m_actionTreeView, &ActionTreeView::actionActivated, this, &ActionView::activated);
 
     connect(m_actionListView, &ActionListView::currentActionChanged,
@@ -560,6 +572,13 @@ void ActionView::selectAll()
 void ActionView::clearSelection()
 {
     m_actionTreeView->selectionModel()->clearSelection();
+}
+
+void ActionView::selectAction(QAction *a)
+{
+    const QModelIndex index = m_model->indexOf(a);
+    if (index.isValid())
+        setCurrentIndex(index);
 }
 
 void ActionView::setCurrentIndex(const QModelIndex &index)

@@ -34,11 +34,10 @@
 #include <QtGui/qpainter.h>
 #include <QtGui/qevent.h>
 
-#include <ActiveQt/QAxWidget>
+#include <QtAxContainer/QAxWidget>
 
 #include <qt_windows.h>
 #include <olectl.h>
-#include <qaxtypes.h>
 
 enum { debugAxWidget = 0 };
 
@@ -78,9 +77,6 @@ const char *widgetIconXPM[]={
 
 QDesignerAxWidget::QDesignerAxWidget(QWidget *parent) :
     QWidget(parent),
-    m_defaultSize(80, 70),
-    m_drawFlags(DrawIndicator|DrawFrame|DrawControl),
-    m_axobject(0),
     m_axImage(widgetIcon())
 {
 }
@@ -117,7 +113,7 @@ void QDesignerAxWidget::resetControl()
     if (!m_axobject)
         return;
     delete m_axobject;
-    m_axobject = 0;
+    m_axobject = nullptr;
     update();
 }
 
@@ -131,7 +127,7 @@ bool QDesignerAxWidget::loadControl(const QString &clsid)
 
     if (!m_axobject->setControl(clsid)) {
         delete m_axobject;
-        m_axobject = 0;
+        m_axobject = nullptr;
         return false;
     }
     update();
@@ -190,9 +186,7 @@ QDesignerAxPluginWidget::QDesignerAxPluginWidget(QWidget *parent) :
 {
 }
 
-QDesignerAxPluginWidget::~QDesignerAxPluginWidget()
-{
-}
+QDesignerAxPluginWidget::~QDesignerAxPluginWidget() = default;
 
 const QMetaObject *QDesignerAxPluginWidget::metaObject() const
 {
@@ -212,6 +206,12 @@ static QString msgComException(const QObject *o, const QMetaObject::Call call, i
 
 #endif // QT_NO_EXCEPTIONS
 
+static bool isInheritedCall(const QMetaObject *mo, QMetaObject::Call call, int id)
+{
+    return call == QMetaObject::InvokeMetaMethod
+        ? (id < mo->methodOffset()) : (id < mo->propertyOffset());
+}
+
 int QDesignerAxPluginWidget::qt_metacall(QMetaObject::Call call, int signal, void **argv)
 {
     QAxWidget *aw = axobject();
@@ -221,10 +221,11 @@ int QDesignerAxPluginWidget::qt_metacall(QMetaObject::Call call, int signal, voi
 
     const QMetaObject *mo = metaObject();
     // Have base class handle inherited stuff (geometry, enabled...)
-    const bool inherited = call == QMetaObject::InvokeMetaMethod ?
-                           (signal < mo->methodOffset()) : (signal < mo->propertyOffset());
-    if (inherited)
-        return QDesignerAxWidget::qt_metacall(call, signal, argv);
+    if (isInheritedCall(mo, call, signal))  {
+        // Skip over QAxBaseWidget
+        return isInheritedCall(mo->superClass(), call, signal)
+            ? QDesignerAxWidget::qt_metacall(call, signal, argv) : -1;
+    }
 
     int rc = -1;
 #ifndef QT_NO_EXCEPTIONS
@@ -234,11 +235,6 @@ int QDesignerAxPluginWidget::qt_metacall(QMetaObject::Call call, int signal, voi
                if (call != QMetaObject::InvokeMetaMethod)
                    qDebug() << objectName() << call << signal << mo->property(signal).name();
         switch (call) {
-        case QMetaObject::QueryPropertyStored: // Pretend all changed properties are stored for them to be saved
-            if (m_propValues.contains(signal))
-                if (argv[0])
-                    *reinterpret_cast< bool*>(argv[0]) = true;
-            break;
         case QMetaObject::ResetProperty:
             rc = aw->qt_metacall(call, signal, argv);
             update();

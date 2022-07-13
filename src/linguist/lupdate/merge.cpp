@@ -33,15 +33,11 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDebug>
+#include <QtCore/QList>
 #include <QtCore/QMap>
 #include <QtCore/QStringList>
-#include <QtCore/QVector>
 
 QT_BEGIN_NAMESPACE
-
-class LU {
-    Q_DECLARE_TR_FUNCTIONS(LUpdate)
-};
 
 static bool isDigitFriendly(QChar c)
 {
@@ -97,8 +93,8 @@ static QString translationAttempt(const QString &oldTranslation,
     QString attempt;
     QStringList oldNumbers;
     QStringList newNumbers;
-    QVector<bool> met(p);
-    QVector<int> matchedYet(p);
+    QList<bool> met(p);
+    QList<int> matchedYet(p);
     int i, j;
     int k = 0, ell, best;
     int m, n;
@@ -213,7 +209,7 @@ static QString translationAttempt(const QString &oldTranslation,
 int applyNumberHeuristic(Translator &tor)
 {
     QMap<QString, QPair<QString, QString> > translated;
-    QVector<bool> untranslated(tor.messageCount());
+    QList<bool> untranslated(tor.messageCount());
     int inserted = 0;
 
     for (int i = 0; i < tor.messageCount(); ++i) {
@@ -234,8 +230,7 @@ int applyNumberHeuristic(Translator &tor)
             TranslatorMessage &msg = tor.message(i);
             const QString &key = zeroKey(msg.sourceText());
             if (!key.isEmpty()) {
-                QMap<QString, QPair<QString, QString> >::ConstIterator t =
-                        translated.constFind(key);
+                const auto t = translated.constFind(key);
                 if (t != translated.constEnd() && t->first != msg.sourceText()) {
                     msg.setTranslation(translationAttempt(t->second, t->first,
                                                           msg.sourceText()));
@@ -262,7 +257,7 @@ int applySameTextHeuristic(Translator &tor)
 {
     QMap<QString, QStringList> translated;
     QMap<QString, bool> avoid; // Want a QTreeSet, in fact
-    QVector<bool> untranslated(tor.messageCount());
+    QList<bool> untranslated(tor.messageCount());
     int inserted = 0;
 
     for (int i = 0; i < tor.messageCount(); ++i) {
@@ -272,7 +267,7 @@ int applySameTextHeuristic(Translator &tor)
                 untranslated[i] = true;
         } else {
             const QString &key = msg.sourceText();
-            QMap<QString, QStringList>::ConstIterator t = translated.constFind(key);
+            const auto t = translated.constFind(key);
             if (t != translated.constEnd()) {
                 /*
                   The same source text is translated at least two
@@ -291,7 +286,7 @@ int applySameTextHeuristic(Translator &tor)
     for (int i = 0; i < tor.messageCount(); ++i) {
         if (untranslated[i]) {
             TranslatorMessage &msg = tor.message(i);
-            QMap<QString, QStringList>::ConstIterator t = translated.constFind(msg.sourceText());
+            const auto t = translated.constFind(msg.sourceText());
             if (t != translated.constEnd()) {
                 msg.setTranslations(*t);
                 ++inserted;
@@ -329,7 +324,7 @@ Translator merge(
       The types of all the messages from the vernacular translator
       are updated according to the virgin translator.
     */
-    foreach (TranslatorMessage m, tor.messages()) {
+    for (TranslatorMessage m : tor.messages()) {
         TranslatorMessage::Type newType = TranslatorMessage::Finished;
 
         if (m.sourceText().isEmpty() && m.id().isEmpty()) {
@@ -450,7 +445,7 @@ Translator merge(
       Messages found only in the virgin translator are added to the
       vernacular translator.
     */
-    foreach (const TranslatorMessage &mv, virginTor.messages()) {
+    for (const TranslatorMessage &mv : virginTor.messages()) {
         if (mv.sourceText().isEmpty() && mv.id().isEmpty()) {
             if (tor.find(mv.context()) >= 0)
                 continue;
@@ -481,8 +476,8 @@ Translator merge(
     /*
       "Alien" translators can be used to augment the vernacular translator.
     */
-    foreach (const Translator &alf, aliens) {
-        foreach (TranslatorMessage mv, alf.messages()) {
+    for (const Translator &alf : aliens) {
+        for (TranslatorMessage mv : alf.messages()) {
             if (mv.sourceText().isEmpty() || !mv.isTranslated())
                 continue;
             int mvi = outTor.find(mv);

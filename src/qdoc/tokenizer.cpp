@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2019 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -26,73 +26,99 @@
 **
 ****************************************************************************/
 
-#include "config.h"
 #include "tokenizer.h"
+
+#include "config.h"
 #include "generator.h"
 
-#include <qfile.h>
-#include <qhash.h>
-#include <qregexp.h>
-#include <qstring.h>
-#include <qtextcodec.h>
+#include <QtCore/qfile.h>
+#include <QtCore/qhash.h>
+#include <QtCore/qregularexpression.h>
+#include <QtCore/qstring.h>
+#include <QtCore/qstringconverter.h>
 
-#include <ctype.h>
-#include <string.h>
+#include <cctype>
+#include <cstring>
 
 QT_BEGIN_NAMESPACE
 
-#define LANGUAGE_CPP                        "Cpp"
+#define LANGUAGE_CPP "Cpp"
 
 /* qmake ignore Q_OBJECT */
 
 /*
   Keep in sync with tokenizer.h.
 */
-static const char *kwords[] = {
-    "char", "class", "const", "double", "enum", "explicit",
-    "friend", "inline", "int", "long", "namespace", "operator",
-    "private", "protected", "public", "short", "signals", "signed",
-    "slots", "static", "struct", "template", "typedef", "typename",
-    "union", "unsigned", "using", "virtual", "void", "volatile",
-    "__int64", "default", "delete", "final", "override",
-    "Q_OBJECT",
-    "Q_OVERRIDE",
-    "Q_PROPERTY",
-    "Q_PRIVATE_PROPERTY",
-    "Q_DECLARE_SEQUENTIAL_ITERATOR",
-    "Q_DECLARE_MUTABLE_SEQUENTIAL_ITERATOR",
-    "Q_DECLARE_ASSOCIATIVE_ITERATOR",
-    "Q_DECLARE_MUTABLE_ASSOCIATIVE_ITERATOR",
-    "Q_DECLARE_FLAGS",
-    "Q_SIGNALS",
-    "Q_SLOTS",
-    "QT_COMPAT",
-    "QT_COMPAT_CONSTRUCTOR",
-    "QT_DEPRECATED",
-    "QT_MOC_COMPAT",
-    "QT_MODULE",
-    "QT3_SUPPORT",
-    "QT3_SUPPORT_CONSTRUCTOR",
-    "QT3_MOC_SUPPORT",
-    "QDOC_PROPERTY",
-    "QPrivateSignal"
-};
+static const char *kwords[] = { "char",
+                                "class",
+                                "const",
+                                "double",
+                                "enum",
+                                "explicit",
+                                "friend",
+                                "inline",
+                                "int",
+                                "long",
+                                "namespace",
+                                "operator",
+                                "private",
+                                "protected",
+                                "public",
+                                "short",
+                                "signals",
+                                "signed",
+                                "slots",
+                                "static",
+                                "struct",
+                                "template",
+                                "typedef",
+                                "typename",
+                                "union",
+                                "unsigned",
+                                "using",
+                                "virtual",
+                                "void",
+                                "volatile",
+                                "__int64",
+                                "default",
+                                "delete",
+                                "final",
+                                "override",
+                                "Q_OBJECT",
+                                "Q_OVERRIDE",
+                                "Q_PROPERTY",
+                                "Q_PRIVATE_PROPERTY",
+                                "Q_DECLARE_SEQUENTIAL_ITERATOR",
+                                "Q_DECLARE_MUTABLE_SEQUENTIAL_ITERATOR",
+                                "Q_DECLARE_ASSOCIATIVE_ITERATOR",
+                                "Q_DECLARE_MUTABLE_ASSOCIATIVE_ITERATOR",
+                                "Q_DECLARE_FLAGS",
+                                "Q_SIGNALS",
+                                "Q_SLOTS",
+                                "QT_COMPAT",
+                                "QT_COMPAT_CONSTRUCTOR",
+                                "QT_DEPRECATED",
+                                "QT_MOC_COMPAT",
+                                "QT_MODULE",
+                                "QT3_SUPPORT",
+                                "QT3_SUPPORT_CONSTRUCTOR",
+                                "QT3_MOC_SUPPORT",
+                                "QDOC_PROPERTY",
+                                "QPrivateSignal" };
 
 static const int KwordHashTableSize = 4096;
 static int kwordHashTable[KwordHashTableSize];
 
 static QHash<QByteArray, bool> *ignoredTokensAndDirectives = nullptr;
 
-static QRegExp *comment = nullptr;
-static QRegExp *versionX = nullptr;
-static QRegExp *definedX = nullptr;
+static QRegularExpression *comment = nullptr;
+static QRegularExpression *versionX = nullptr;
+static QRegularExpression *definedX = nullptr;
 
-static QRegExp *defines = nullptr;
-static QRegExp *falsehoods = nullptr;
+static QRegularExpression *defines = nullptr;
+static QRegularExpression *falsehoods = nullptr;
 
-#ifndef QT_NO_TEXTCODEC
-static QTextCodec *sourceCodec = nullptr;
-#endif
+static QStringDecoder sourceDecoder;
 
 /*
   This function is a perfect hash function for the 37 keywords of C99
@@ -101,8 +127,7 @@ static QTextCodec *sourceCodec = nullptr;
 */
 static int hashKword(const char *s, int len)
 {
-    return (((uchar) s[0]) + (((uchar) s[2]) << 5) +
-            (((uchar) s[len - 1]) << 3)) % KwordHashTableSize;
+    return (((uchar)s[0]) + (((uchar)s[2]) << 5) + (((uchar)s[len - 1]) << 3)) % KwordHashTableSize;
 }
 
 static void insertKwordIntoHash(const char *s, int number)
@@ -115,7 +140,7 @@ static void insertKwordIntoHash(const char *s, int number)
     kwordHashTable[k] = number;
 }
 
-Tokenizer::Tokenizer(const Location& loc, QFile &in)
+Tokenizer::Tokenizer(const Location &loc, QFile &in)
 {
     init();
     yyIn = in.readAll();
@@ -123,8 +148,7 @@ Tokenizer::Tokenizer(const Location& loc, QFile &in)
     start(loc);
 }
 
-Tokenizer::Tokenizer(const Location& loc, const QByteArray &in)
-    : yyIn(in)
+Tokenizer::Tokenizer(const Location &loc, const QByteArray &in) : yyIn(in)
 {
     init();
     yyPos = 0;
@@ -151,8 +175,7 @@ int Tokenizer::getToken()
             do {
                 yyCh = getChar();
             } while (isspace(yyCh));
-        }
-        else if (isalpha(yyCh) || yyCh == '_') {
+        } else if (isalpha(yyCh) || yyCh == '_') {
             do {
                 yyCh = getChar();
             } while (isalnum(yyCh) || yyCh == '_');
@@ -162,8 +185,7 @@ int Tokenizer::getToken()
                 int i = kwordHashTable[k];
                 if (i == 0) {
                     return Tok_Ident;
-                }
-                else if (i == -1) {
+                } else if (i == -1) {
                     if (!parsingMacro && ignoredTokensAndDirectives->contains(yyLex)) {
                         if (ignoredTokensAndDirectives->value(yyLex)) { // it's a directive
                             int parenDepth = 0;
@@ -179,9 +201,8 @@ int Tokenizer::getToken()
                         }
                         break;
                     }
-                }
-                else if (strcmp(yyLex, kwords[i - 1]) == 0) {
-                    int ret = (int) Tok_FirstKeyword + i - 1;
+                } else if (strcmp(yyLex, kwords[i - 1]) == 0) {
+                    int ret = (int)Tok_FirstKeyword + i - 1;
                     if (ret != Tok_typename)
                         return ret;
                     break;
@@ -190,15 +211,12 @@ int Tokenizer::getToken()
                 if (++k == KwordHashTableSize)
                     k = 0;
             }
-        }
-        else if (isdigit(yyCh)) {
+        } else if (isdigit(yyCh)) {
             do {
                 yyCh = getChar();
-            } while (isalnum(yyCh) || yyCh == '.' || yyCh == '+' ||
-                     yyCh == '-');
+            } while (isalnum(yyCh) || yyCh == '.' || yyCh == '+' || yyCh == '-');
             return Tok_Number;
-        }
-        else {
+        } else {
             switch (yyCh) {
             case '!':
             case '%':
@@ -217,8 +235,9 @@ int Tokenizer::getToken()
                 yyCh = getChar();
 
                 if (yyCh == EOF)
-                    yyTokLoc.warning(tr("Unterminated C++ string literal"),
-                                     tr("Maybe you forgot '/*!' at the beginning of the file?"));
+                    yyTokLoc.warning(
+                            QStringLiteral("Unterminated C++ string literal"),
+                            QStringLiteral("Maybe you forgot '/*!' at the beginning of the file?"));
                 else
                     return Tok_String;
                 break;
@@ -233,8 +252,7 @@ int Tokenizer::getToken()
                 if (yyCh == '=') {
                     yyCh = getChar();
                     return Tok_SomeOperator;
-                }
-                else {
+                } else {
                     return Tok_Ampersand;
                 }
             case '\'':
@@ -253,9 +271,8 @@ int Tokenizer::getToken()
                 } while (yyCh != EOF && yyCh != '\'');
 
                 if (yyCh == EOF) {
-                    yyTokLoc.warning(tr("Unterminated C++ character literal"));
-                }
-                else {
+                    yyTokLoc.warning(QStringLiteral("Unterminated C++ character literal"));
+                } else {
                     yyCh = getChar();
                     return Tok_Number;
                 }
@@ -327,8 +344,7 @@ int Tokenizer::getToken()
                 } else if (isdigit(yyCh)) {
                     do {
                         yyCh = getChar();
-                    } while (isalnum(yyCh) || yyCh == '.' || yyCh == '+' ||
-                             yyCh == '-');
+                    } while (isalnum(yyCh) || yyCh == '.' || yyCh == '+' || yyCh == '-');
                     return Tok_Number;
                 }
                 return Tok_SomeOperator;
@@ -350,7 +366,7 @@ int Tokenizer::getToken()
 
                     while (!metAsterSlash) {
                         if (yyCh == EOF) {
-                            yyTokLoc.warning(tr("Unterminated C++ comment"));
+                            yyTokLoc.warning(QStringLiteral("Unterminated C++ comment"));
                             break;
                         } else {
                             if (yyCh == '*') {
@@ -461,10 +477,11 @@ int Tokenizer::getToken()
             default:
                 // ### We should really prevent qdoc from looking at snippet files rather than
                 // ### suppress warnings when reading them.
-                if (yyNumPreprocessorSkipping == 0 && !(yyTokLoc.fileName().endsWith(".qdoc") ||
-                                                        yyTokLoc.fileName().endsWith(".js"))) {
-                    yyTokLoc.warning(tr("Hostile character 0x%1 in C++ source")
-                                     .arg((uchar)yyCh, 1, 16));
+                if (yyNumPreprocessorSkipping == 0
+                    && !(yyTokLoc.fileName().endsWith(".qdoc")
+                         || yyTokLoc.fileName().endsWith(".js"))) {
+                    yyTokLoc.warning(QStringLiteral("Hostile character 0x%1 in C++ source")
+                                             .arg((uchar)yyCh, 1, 16));
                 }
                 yyCh = getChar();
             }
@@ -472,7 +489,7 @@ int Tokenizer::getToken()
     }
 
     if (yyPreprocessorSkipping.count() > 1) {
-        yyTokLoc.warning(tr("Expected #endif before end of file"));
+        yyTokLoc.warning(QStringLiteral("Expected #endif before end of file"));
         // clear it out or we get an infinite loop!
         while (!yyPreprocessorSkipping.isEmpty()) {
             popSkipping();
@@ -484,29 +501,31 @@ int Tokenizer::getToken()
     return Tok_Eoi;
 }
 
-void Tokenizer::initialize(const Config &config)
+void Tokenizer::initialize()
 {
+    Config &config = Config::instance();
     QString versionSym = config.getString(CONFIG_VERSIONSYM);
 
     QString sourceEncoding = config.getString(CONFIG_SOURCEENCODING);
     if (sourceEncoding.isEmpty())
-        sourceEncoding = QLatin1String("ISO-8859-1");
-#ifndef QT_NO_TEXTCODEC
-    sourceCodec = QTextCodec::codecForName(sourceEncoding.toLocal8Bit());
-#endif
+        sourceEncoding = QLatin1String("UTF-8");
+    sourceDecoder = QStringDecoder(sourceEncoding.toUtf8());
+    if (!sourceDecoder.isValid()) {
+        qWarning() << "Source encoding" << sourceEncoding << "is not supported. Using UTF-8.";
+        sourceDecoder = QStringDecoder::Utf8;
+    }
 
-    comment = new QRegExp("/(?:\\*.*\\*/|/.*\n|/[^\n]*$)");
-    comment->setMinimal(true);
-    versionX = new QRegExp("$cannot possibly match^");
+    comment = new QRegularExpression("/(?:\\*.*\\*/|/.*\n|/[^\n]*$)", QRegularExpression::InvertedGreedinessOption);
+    versionX = new QRegularExpression("$cannot possibly match^");
     if (!versionSym.isEmpty())
-        versionX->setPattern("[ \t]*(?:" + QRegExp::escape(versionSym)
-                             + ")[ \t]+\"([^\"]*)\"[ \t]*");
-    definedX = new QRegExp("defined ?\\(?([A-Z_0-9a-z]+) ?\\)?");
+        versionX->setPattern("^[ \t]*(?:" + QRegularExpression::escape(versionSym)
+                             + ")[ \t]+\"([^\"]*)\"[ \t]*$");
+    definedX = new QRegularExpression("^defined ?\\(?([A-Z_0-9a-z]+) ?\\)?$");
 
     QStringList d = config.getStringList(CONFIG_DEFINES);
     d += "qdoc";
-    defines = new QRegExp(d.join('|'));
-    falsehoods = new QRegExp(config.getStringList(CONFIG_FALSEHOODS).join('|'));
+    defines = new QRegularExpression(QRegularExpression::anchoredPattern(d.join('|')));
+    falsehoods = new QRegularExpression(QRegularExpression::anchoredPattern(config.getStringList(CONFIG_FALSEHOODS).join('|')));
 
     /*
       The keyword hash table is always cleared before any words are inserted.
@@ -517,17 +536,18 @@ void Tokenizer::initialize(const Config &config)
 
     ignoredTokensAndDirectives = new QHash<QByteArray, bool>;
 
-    QStringList tokens = config.getStringList(LANGUAGE_CPP + Config::dot + CONFIG_IGNORETOKENS);
-    foreach (const QString &t, tokens) {
-        const QByteArray tb = t.toLatin1();
+    const QStringList tokens =
+            config.getStringList(LANGUAGE_CPP + Config::dot + CONFIG_IGNORETOKENS);
+    for (const auto &token : tokens) {
+        const QByteArray tb = token.toLatin1();
         ignoredTokensAndDirectives->insert(tb, false);
         insertKwordIntoHash(tb.data(), -1);
     }
 
-    QStringList directives = config.getStringList(LANGUAGE_CPP + Config::dot
-                                                  + CONFIG_IGNOREDIRECTIVES);
-    foreach (const QString &d, directives) {
-        const QByteArray db = d.toLatin1();
+    const QStringList directives =
+            config.getStringList(LANGUAGE_CPP + Config::dot + CONFIG_IGNOREDIRECTIVES);
+    for (const auto &directive : directives) {
+        const QByteArray db = directive.toLatin1();
         ignoredTokensAndDirectives->insert(db, true);
         insertKwordIntoHash(db.data(), -1);
     }
@@ -556,8 +576,8 @@ void Tokenizer::terminate()
 
 void Tokenizer::init()
 {
-    yyLexBuf1 = new char[(int) yyLexBufSize];
-    yyLexBuf2 = new char[(int) yyLexBufSize];
+    yyLexBuf1 = new char[(int)yyLexBufSize];
+    yyLexBuf2 = new char[(int)yyLexBufSize];
     yyPrevLex = yyLexBuf1;
     yyPrevLex[0] = '\0';
     yyLex = yyLexBuf2;
@@ -572,7 +592,7 @@ void Tokenizer::init()
     parsingMacro = false;
 }
 
-void Tokenizer::start(const Location& loc)
+void Tokenizer::start(const Location &loc)
 {
     yyTokLoc = loc;
     yyCurLoc = loc;
@@ -615,7 +635,7 @@ int Tokenizer::getTokenAfterPreprocessor()
                 if (yyCh == '\r')
                     yyCh = getChar();
             }
-            condition += yyCh;
+            condition += QChar(yyCh);
             yyCh = getChar();
         }
         condition.remove(*comment);
@@ -642,9 +662,9 @@ int Tokenizer::getTokenAfterPreprocessor()
             if (directive == QString("if"))
                 pushSkipping(!isTrue(condition));
             else if (directive == QString("ifdef"))
-                pushSkipping(!defines->exactMatch(condition));
+                pushSkipping(!defines->match(condition).hasMatch());
             else if (directive == QString("ifndef"))
-                pushSkipping(defines->exactMatch(condition));
+                pushSkipping(defines->match(condition).hasMatch());
         } else if (directive[0] == QChar('e')) {
             if (directive == QString("elif")) {
                 bool old = popSkipping();
@@ -658,8 +678,9 @@ int Tokenizer::getTokenAfterPreprocessor()
                 popSkipping();
             }
         } else if (directive == QString("define")) {
-            if (versionX->exactMatch(condition))
-                yyVersion = versionX->cap(1);
+            auto match = versionX->match(condition);
+            if (match.hasMatch())
+                yyVersion = match.captured(1);
         }
     }
 
@@ -701,7 +722,7 @@ void Tokenizer::pushSkipping(bool skip)
 bool Tokenizer::popSkipping()
 {
     if (yyPreprocessorSkipping.isEmpty()) {
-        yyTokLoc.warning(tr("Unexpected #elif, #else or #endif"));
+        yyTokLoc.warning(QStringLiteral("Unexpected #elif, #else or #endif"));
         return true;
     }
 
@@ -733,7 +754,7 @@ bool Tokenizer::isTrue(const QString &condition)
           X && Y || Z     // the or
           (X || Y) && Z   // the and
     */
-    for (int i = 0; i < (int) condition.length() - 1; i++) {
+    for (int i = 0; i < condition.length() - 1; i++) {
         QChar ch = condition[i];
         if (ch == QChar('(')) {
             parenDepth++;
@@ -752,11 +773,9 @@ bool Tokenizer::isTrue(const QString &condition)
         }
     }
     if (firstOr != -1)
-        return isTrue(condition.left(firstOr)) ||
-                isTrue(condition.mid(firstOr + 2));
+        return isTrue(condition.left(firstOr)) || isTrue(condition.mid(firstOr + 2));
     if (firstAnd != -1)
-        return isTrue(condition.left(firstAnd)) &&
-                isTrue(condition.mid(firstAnd + 2));
+        return isTrue(condition.left(firstAnd)) && isTrue(condition.mid(firstAnd + 2));
 
     QString t = condition.simplified();
     if (t.isEmpty())
@@ -767,28 +786,21 @@ bool Tokenizer::isTrue(const QString &condition)
     if (t[0] == QChar('(') && t.endsWith(QChar(')')))
         return isTrue(t.mid(1, t.length() - 2));
 
-    if (definedX->exactMatch(t))
-        return defines->exactMatch(definedX->cap(1));
+    auto match = definedX->match(t);
+    if (match.hasMatch())
+        return defines->match(match.captured(1)).hasMatch();
     else
-        return !falsehoods->exactMatch(t);
+        return !falsehoods->match(t).hasMatch();
 }
 
 QString Tokenizer::lexeme() const
 {
-#ifndef QT_NO_TEXTCODEC
-    return sourceCodec->toUnicode(yyLex);
-#else
-    return QString::fromUtf8(yyLex);
-#endif
+    return sourceDecoder(yyLex);
 }
 
 QString Tokenizer::previousLexeme() const
 {
-#ifndef QT_NO_TEXTCODEC
-    return sourceCodec->toUnicode(yyPrevLex);
-#else
-    return QString::fromUtf8(yyPrevLex);
-#endif
+    return sourceDecoder(yyPrevLex);
 }
 
 QT_END_NAMESPACE

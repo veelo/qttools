@@ -79,30 +79,44 @@ Q_NORETURN static void error(const QString &message)
     ::exit(EXIT_FAILURE);
 }
 
-
-/*
- * NOTE: that DataLocation and CacheLocation are missing as
- * they don't really make sense for a utility like this because
- * they include the application name.
- */
-static const struct StringEnum {
+class StringEnum {
+public:
     const char *stringvalue;
     QStandardPaths::StandardLocation enumvalue;
-} lookupTableData[] = {
-    { "ApplicationsLocation", QStandardPaths::ApplicationsLocation },
-    { "DesktopLocation", QStandardPaths::DesktopLocation },
-    { "DocumentsLocation", QStandardPaths::DocumentsLocation },
-    { "FontsLocation", QStandardPaths::FontsLocation },
-    { "MusicLocation", QStandardPaths::MusicLocation },
-    { "MoviesLocation", QStandardPaths::MoviesLocation },
-    { "PicturesLocation", QStandardPaths::PicturesLocation },
-    { "HomeLocation", QStandardPaths::HomeLocation },
-    { "GenericCacheLocation", QStandardPaths::GenericCacheLocation },
-    { "GenericDataLocation", QStandardPaths::GenericDataLocation },
-    { "RuntimeLocation", QStandardPaths::RuntimeLocation },
-    { "ConfigLocation", QStandardPaths::ConfigLocation },
-    { "GenericConfigLocation", QStandardPaths::GenericConfigLocation },
-    { "DownloadLocation", QStandardPaths::DownloadLocation }
+    bool hasappname;
+
+    /**
+    * Replace application name by generic name if requested
+    */
+    QString mapName(const QString &s) const
+    {
+        return hasappname ? QString(s).replace("qtpaths", "<APPNAME>") : s;
+    }
+};
+
+static const StringEnum lookupTableData[] = {
+    { "AppConfigLocation", QStandardPaths::AppConfigLocation, true },
+    { "AppDataLocation", QStandardPaths::AppDataLocation, true },
+    { "AppLocalDataLocation", QStandardPaths::AppLocalDataLocation, true },
+    { "ApplicationsLocation", QStandardPaths::ApplicationsLocation, false },
+    { "CacheLocation", QStandardPaths::CacheLocation, true },
+    { "ConfigLocation", QStandardPaths::ConfigLocation, false },
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
+    { "DataLocation", QStandardPaths::DataLocation, true },
+#endif
+    { "DesktopLocation", QStandardPaths::DesktopLocation, false },
+    { "DocumentsLocation", QStandardPaths::DocumentsLocation, false },
+    { "DownloadLocation", QStandardPaths::DownloadLocation, false },
+    { "FontsLocation", QStandardPaths::FontsLocation, false },
+    { "GenericCacheLocation", QStandardPaths::GenericCacheLocation, false },
+    { "GenericConfigLocation", QStandardPaths::GenericConfigLocation, false },
+    { "GenericDataLocation", QStandardPaths::GenericDataLocation, false },
+    { "HomeLocation", QStandardPaths::HomeLocation, false },
+    { "MoviesLocation", QStandardPaths::MoviesLocation, false },
+    { "MusicLocation", QStandardPaths::MusicLocation, false },
+    { "PicturesLocation", QStandardPaths::PicturesLocation, false },
+    { "RuntimeLocation", QStandardPaths::RuntimeLocation, false },
+    { "TempLocation", QStandardPaths::TempLocation, false }
 };
 
 /**
@@ -111,21 +125,21 @@ static const struct StringEnum {
 static QStringList types()
 {
     QStringList typelist;
-    for (unsigned int i = 0; i < sizeof(lookupTableData)/sizeof(lookupTableData[0]); i++)
-        typelist << QString::fromLatin1(lookupTableData[i].stringvalue);
+    for (const StringEnum &se : lookupTableData)
+        typelist << QString::fromLatin1(se.stringvalue);
     std::sort(typelist.begin(), typelist.end());
     return typelist;
 }
 
 /**
- * Tries to parse the location string into a StandardLocation or alternatively
+ * Tries to parse the location string into a reference to a StringEnum entry or alternatively
  * calls \ref error with a error message
  */
-static QStandardPaths::StandardLocation parseLocationOrError(const QString &locationString)
+static const StringEnum &parseLocationOrError(const QString &locationString)
 {
-    for (unsigned int i = 0; i < sizeof(lookupTableData)/sizeof(lookupTableData[0]); i++)
-        if (locationString == QLatin1String(lookupTableData[i].stringvalue))
-            return lookupTableData[i].enumvalue;
+    for (const StringEnum &se : lookupTableData)
+        if (locationString == QLatin1String(se.stringvalue))
+            return se;
 
     QString message = QCoreApplication::translate("qtpaths", "Unknown location: %1");
     error(message.arg(locationString));
@@ -226,17 +240,17 @@ int main(int argc, char **argv)
     }
 
     if (parser.isSet(installprefix)) {
-        QString path = QLibraryInfo::location(QLibraryInfo::PrefixPath);
+        QString path = QLibraryInfo::path(QLibraryInfo::PrefixPath);
         results << path;
     }
 
     if (parser.isSet(bindir)) {
-        QString path = QLibraryInfo::location(QLibraryInfo::BinariesPath);
+        QString path = QLibraryInfo::path(QLibraryInfo::BinariesPath);
         results << path;
     }
 
     if (parser.isSet(plugindir)) {
-        QString path = QLibraryInfo::location(QLibraryInfo::PluginsPath);
+        QString path = QLibraryInfo::path(QLibraryInfo::PluginsPath);
         results << path;
     }
 
@@ -246,21 +260,21 @@ int main(int argc, char **argv)
     }
 
     if (parser.isSet(display)) {
-        QStandardPaths::StandardLocation location = parseLocationOrError(parser.value(display));
-        QString text = QStandardPaths::displayName(location);
-        results << text;
+        const StringEnum &location = parseLocationOrError(parser.value(display));
+        QString text = QStandardPaths::displayName(location.enumvalue);
+        results << location.mapName(text);
     }
 
     if (parser.isSet(paths)) {
-        QStandardPaths::StandardLocation location = parseLocationOrError(parser.value(paths));
-        QStringList paths = QStandardPaths::standardLocations(location);
-        results << paths.join(pathsep);
+        const StringEnum &location = parseLocationOrError(parser.value(paths));
+        QStringList paths = QStandardPaths::standardLocations(location.enumvalue);
+        results << location.mapName(paths.join(pathsep));
     }
 
     if (parser.isSet(writablePath)) {
-        QStandardPaths::StandardLocation location = parseLocationOrError(parser.value(writablePath));
-        QString path = QStandardPaths::writableLocation(location);
-        results << path;
+        const StringEnum &location = parseLocationOrError(parser.value(writablePath));
+        QString path = QStandardPaths::writableLocation(location.enumvalue);
+        results << location.mapName(path);
     }
 
     if (parser.isSet(findExe)) {
@@ -270,31 +284,31 @@ int main(int argc, char **argv)
     }
 
     if (parser.isSet(locateDir)) {
-        QStandardPaths::StandardLocation location = parseLocationOrError(parser.value(locateDir));
+        const StringEnum &location = parseLocationOrError(parser.value(locateDir));
         QString searchitem = searchStringOrError(&parser);
-        QString path = QStandardPaths::locate(location, searchitem, QStandardPaths::LocateDirectory);
-        results << path;
+        QString path = QStandardPaths::locate(location.enumvalue, searchitem, QStandardPaths::LocateDirectory);
+        results << location.mapName(path);
     }
 
     if (parser.isSet(locateFile)) {
-        QStandardPaths::StandardLocation location = parseLocationOrError(parser.value(locateFile));
+        const StringEnum &location = parseLocationOrError(parser.value(locateFile));
         QString searchitem = searchStringOrError(&parser);
-        QString path = QStandardPaths::locate(location, searchitem, QStandardPaths::LocateFile);
-        results << path;
+        QString path = QStandardPaths::locate(location.enumvalue, searchitem, QStandardPaths::LocateFile);
+        results << location.mapName(path);
     }
 
     if (parser.isSet(locateDirs)) {
-        QStandardPaths::StandardLocation location = parseLocationOrError(parser.value(locateDirs));
+        const StringEnum &location = parseLocationOrError(parser.value(locateDirs));
         QString searchitem = searchStringOrError(&parser);
-        QStringList paths = QStandardPaths::locateAll(location, searchitem, QStandardPaths::LocateDirectory);
-        results << paths.join(pathsep);
+        QStringList paths = QStandardPaths::locateAll(location.enumvalue, searchitem, QStandardPaths::LocateDirectory);
+        results << location.mapName(paths.join(pathsep));
     }
 
     if (parser.isSet(locateFiles)) {
-        QStandardPaths::StandardLocation location = parseLocationOrError(parser.value(locateFiles));
+        const StringEnum &location = parseLocationOrError(parser.value(locateFiles));
         QString searchitem = searchStringOrError(&parser);
-        QStringList paths = QStandardPaths::locateAll(location, searchitem, QStandardPaths::LocateFile);
-        results << paths.join(pathsep);
+        QStringList paths = QStandardPaths::locateAll(location.enumvalue, searchitem, QStandardPaths::LocateFile);
+        results << location.mapName(paths.join(pathsep));
     }
     if (results.isEmpty()) {
         parser.showHelp();

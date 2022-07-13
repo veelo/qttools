@@ -85,7 +85,7 @@ bool AssistantClient::sendCommand(const QString &cmd, QString *errorMessage)
         return false;
     }
     QTextStream str(m_process);
-    str << cmd << QLatin1Char('\n') << endl;
+    str << cmd << QLatin1Char('\n') << Qt::endl;
     return true;
 }
 
@@ -96,7 +96,7 @@ bool AssistantClient::isRunning() const
 
 QString AssistantClient::binary()
 {
-    QString app = QLibraryInfo::location(QLibraryInfo::BinariesPath) + QDir::separator();
+    QString app = QLibraryInfo::path(QLibraryInfo::BinariesPath) + QDir::separator();
 #if !defined(Q_OS_MACOS)
     app += QStringLiteral("assistant");
 #else

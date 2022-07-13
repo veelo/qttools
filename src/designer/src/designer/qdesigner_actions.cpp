@@ -60,18 +60,21 @@
 #include <QtDesigner/private/shared_settings_p.h>
 #include <QtDesigner/private/formwindowbase_p.h>
 
-#include <QtWidgets/qaction.h>
-#include <QtWidgets/qactiongroup.h>
 #include <QtWidgets/qstylefactory.h>
 #include <QtWidgets/qfiledialog.h>
 #include <QtWidgets/qmenu.h>
 #include <QtWidgets/qmessagebox.h>
 #include <QtWidgets/qmdisubwindow.h>
 #include <QtWidgets/qpushbutton.h>
+#include <QtWidgets/qstatusbar.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qactiongroup.h>
 #include <QtGui/qevent.h>
 #include <QtGui/qicon.h>
 #include <QtGui/qimage.h>
 #include <QtGui/qpixmap.h>
+#include <QtGui/qscreen.h>
 #if defined(QT_PRINTSUPPORT_LIB) // Some platforms may not build QtPrintSupport
 #  include <QtPrintSupport/qtprintsupportglobal.h>
 #  if QT_CONFIG(printer) && QT_CONFIG(printdialog)
@@ -83,8 +86,8 @@
 #include <QtGui/qpainter.h>
 #include <QtGui/qtransform.h>
 #include <QtGui/qcursor.h>
-#include <QtCore/qsize.h>
 
+#include <QtCore/qsize.h>
 #include <QtCore/qlibraryinfo.h>
 #include <QtCore/qbuffer.h>
 #include <QtCore/qpluginloader.h>
@@ -92,8 +95,8 @@
 #include <QtCore/qtimer.h>
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qfileinfo.h>
-#include <QtWidgets/qstatusbar.h>
-#include <QtWidgets/qdesktopwidget.h>
+#include <QtCore/qsavefile.h>
+#include <QtCore/qscopedpointer.h>
 #include <QtXml/qdom.h>
 
 QT_BEGIN_NAMESPACE
@@ -129,36 +132,18 @@ static inline QString savedMessage(const QString &fileName)
     return QDesignerActions::tr("Saved %1.").arg(fileName);
 }
 
-// Prompt for a file and make sure an extension is added
-// unless the user explicitly specifies another one.
-
-static QString getSaveFileNameWithExtension(QWidget *parent, const QString &title, QString dir, const QString &filter, const QString &extension)
+static QString fileDialogFilters(const QString &extension)
 {
-    const QChar dot = QLatin1Char('.');
+    return QDesignerActions::tr("Designer UI files (*.%1);;All Files (*)").arg(extension);
+}
 
-    QString saveFile;
-    while (true) {
-        saveFile = QFileDialog::getSaveFileName(parent, title, dir, filter, nullptr, QFileDialog::DontConfirmOverwrite);
-        if (saveFile.isEmpty())
-            return saveFile;
-
-        const QFileInfo fInfo(saveFile);
-        if (fInfo.suffix().isEmpty() && !fInfo.fileName().endsWith(dot)) {
-            saveFile += dot;
-            saveFile += extension;
-        }
-
-        const QFileInfo fi(saveFile);
-        if (!fi.exists())
-            break;
-
-        const QString prompt = QDesignerActions::tr("%1 already exists.\nDo you want to replace it?").arg(fi.fileName());
-        if (QMessageBox::warning(parent, title, prompt, QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes)
-            break;
-
-        dir = saveFile;
-    }
-    return saveFile;
+QFileDialog *createSaveAsDialog(QWidget *parent, const QString &dir, const QString &extension)
+{
+    auto result = new QFileDialog(parent, QDesignerActions::tr("Save Form As"),
+                                  dir, fileDialogFilters(extension));
+    result->setAcceptMode(QFileDialog::AcceptSave);
+    result->setDefaultSuffix(extension);
+    return result;
 }
 
 QDesignerActions::QDesignerActions(QDesignerWorkbench *workbench)
@@ -311,9 +296,11 @@ QDesignerActions::QDesignerActions(QDesignerWorkbench *workbench)
 
     m_editActions->addAction(createSeparator(this));
 
+#if QT_CONFIG(clipboard)
     m_editActions->addAction(formWindowManager->action(QDesignerFormWindowManagerInterface::CutAction));
     m_editActions->addAction(formWindowManager->action(QDesignerFormWindowManagerInterface::CopyAction));
     m_editActions->addAction(formWindowManager->action(QDesignerFormWindowManagerInterface::PasteAction));
+#endif
     m_editActions->addAction(formWindowManager->action(QDesignerFormWindowManagerInterface::DeleteAction));
 
     m_editActions->addAction(formWindowManager->action(QDesignerFormWindowManagerInterface::SelectAllAction));
@@ -336,7 +323,8 @@ QDesignerActions::QDesignerActions(QDesignerWorkbench *workbench)
     shortcuts.append(QKeySequence(Qt::Key_Escape));
     m_editWidgetsAction->setShortcuts(shortcuts);
     QIcon fallback(m_core->resourceLocation() + QStringLiteral("/widgettool.png"));
-    m_editWidgetsAction->setIcon(QIcon::fromTheme("designer-edit-widget", fallback));
+    m_editWidgetsAction->setIcon(QIcon::fromTheme(QStringLiteral("designer-edit-widget"),
+                                                  fallback));
     connect(m_editWidgetsAction, &QAction::triggered, this, &QDesignerActions::editWidgetsSlot);
     m_editWidgetsAction->setChecked(true);
     m_editWidgetsAction->setEnabled(false);
@@ -456,7 +444,7 @@ QActionGroup *QDesignerActions::createHelpActions()
     QAction *mainHelpAction = new QAction(tr("Qt Designer &Help"), this);
     mainHelpAction->setObjectName(QStringLiteral("__qt_designer_help_action"));
     connect(mainHelpAction, &QAction::triggered, this, &QDesignerActions::showDesignerHelp);
-    mainHelpAction->setShortcut(Qt::CTRL + Qt::Key_Question);
+    mainHelpAction->setShortcut(Qt::CTRL | Qt::Key_Question);
     helpActions->addAction(mainHelpAction);
 
     helpActions->addAction(createSeparator(this));
@@ -520,13 +508,15 @@ QAction *QDesignerActions::createRecentFilesMenu()
     }
     updateRecentFileActions();
     menu->addSeparator();
-    act = new QAction(QIcon::fromTheme("edit-clear"), tr("Clear &Menu"), this);
+    act = new QAction(QIcon::fromTheme(QStringLiteral("edit-clear")),
+                      tr("Clear &Menu"), this);
     act->setObjectName(QStringLiteral("__qt_action_clear_menu_"));
     connect(act, &QAction::triggered, this, &QDesignerActions::clearRecentFiles);
     m_recentFilesActions->addAction(act);
     menu->addAction(act);
 
-    act = new QAction(QIcon::fromTheme("document-open-recent"), tr("&Recent Forms"), this);
+    act = new QAction(QIcon::fromTheme(QStringLiteral("document-open-recent")),
+                      tr("&Recent Forms"), this);
     act->setMenu(menu);
     return act;
 }
@@ -604,7 +594,7 @@ bool QDesignerActions::openForm(QWidget *parent)
     closePreview();
     const QString extension = uiExtension();
     const QStringList fileNames = QFileDialog::getOpenFileNames(parent, tr("Open Form"),
-        m_openDirectory, tr("Designer UI files (*.%1);;All Files (*)").arg(extension), nullptr);
+        m_openDirectory, fileDialogFilters(extension), nullptr);
 
     if (fileNames.isEmpty())
         return false;
@@ -641,9 +631,12 @@ bool QDesignerActions::saveFormAs(QDesignerFormWindowInterface *fw)
         dir += extension;
     }
 
-    const  QString saveFile = getSaveFileNameWithExtension(fw, tr("Save Form As"), dir, tr("Designer UI files (*.%1);;All Files (*)").arg(extension), extension);
-    if (saveFile.isEmpty())
+    QScopedPointer<QFileDialog> saveAsDialog(createSaveAsDialog(fw, dir, extension));
+    if (saveAsDialog->exec() != QDialog::Accepted)
         return false;
+
+    const QString saveFile = saveAsDialog->selectedFiles().constFirst();
+    saveAsDialog.reset(); // writeOutForm potentially shows other dialogs
 
     fw->setFileName(saveFile);
     return writeOutForm(fw, saveFile);
@@ -786,7 +779,7 @@ bool QDesignerActions::readInForm(const QString &fileName)
                 const QString extension = uiExtension();
                 fn = QFileDialog::getOpenFileName(core()->topLevel(),
                                                   tr("Open Form"), m_openDirectory,
-                                                  tr("Designer UI files (*.%1);;All Files (*)").arg(extension), nullptr);
+                                                  fileDialogFilters(extension), nullptr);
 
                 if (fn.isEmpty())
                     return false;
@@ -812,36 +805,9 @@ bool QDesignerActions::readInForm(const QString &fileName)
     return true;
 }
 
-static QString createBackup(const QString &fileName)
-{
-    const QString suffix = QStringLiteral(".bak");
-    QString backupFile = fileName + suffix;
-    QFileInfo fi(backupFile);
-    int i = 0;
-    while (fi.exists()) {
-        backupFile = fileName + suffix + QString::number(++i);
-        fi.setFile(backupFile);
-    }
-
-    if (QFile::copy(fileName, backupFile))
-        return backupFile;
-    return QString();
-}
-
-static void removeBackup(const QString &backupFile)
-{
-    if (!backupFile.isEmpty())
-        QFile::remove(backupFile);
-}
-
 bool QDesignerActions::writeOutForm(QDesignerFormWindowInterface *fw, const QString &saveFile, bool check)
 {
     Q_ASSERT(fw && !saveFile.isEmpty());
-
-    QString backupFile;
-    QFileInfo fi(saveFile);
-    if (fi.exists())
-        backupFile = createBackup(saveFile);
 
     if (check) {
         const QStringList problems = fw->checkContents();
@@ -854,10 +820,9 @@ bool QDesignerActions::writeOutForm(QDesignerFormWindowInterface *fw, const QStr
         if (fwb->lineTerminatorMode() == qdesigner_internal::FormWindowBase::CRLFLineTerminator)
             contents.replace(QLatin1Char('\n'), QStringLiteral("\r\n"));
     }
-    const QByteArray utf8Array = contents.toUtf8();
     m_workbench->updateBackup(fw);
 
-    QFile f(saveFile);
+    QSaveFile f(saveFile);
     while (!f.open(QFile::WriteOnly)) {
         QMessageBox box(QMessageBox::Warning,
                         tr("Save Form?"),
@@ -875,52 +840,33 @@ bool QDesignerActions::writeOutForm(QDesignerFormWindowInterface *fw, const QStr
         QPushButton *cancelButton = box.addButton(QMessageBox::Cancel);
         box.exec();
 
-        if (box.clickedButton() == cancelButton) {
-            removeBackup(backupFile);
+        if (box.clickedButton() == cancelButton)
             return false;
-        }
         if (box.clickedButton() == switchButton) {
-            QString extension = uiExtension();
-            const QString fileName = QFileDialog::getSaveFileName(fw, tr("Save Form As"),
-                                                                  QDir::current().absolutePath(),
-                                                                  QStringLiteral("*.") + extension);
-            if (fileName.isEmpty()) {
-                removeBackup(backupFile);
+            QScopedPointer<QFileDialog> saveAsDialog(createSaveAsDialog(fw, QDir::currentPath(), uiExtension()));
+            if (saveAsDialog->exec() != QDialog::Accepted)
                 return false;
-            }
-            if (f.fileName() != fileName) {
-                removeBackup(backupFile);
-                fi.setFile(fileName);
-                backupFile.clear();
-                if (fi.exists())
-                    backupFile = createBackup(fileName);
-            }
+
+            const QString fileName = saveAsDialog->selectedFiles().constFirst();
             f.setFileName(fileName);
             fw->setFileName(fileName);
         }
         // loop back around...
     }
-    while (f.write(utf8Array, utf8Array.size()) != utf8Array.size()) {
-        QMessageBox box(QMessageBox::Warning, tr("Save Form?"),
+    f.write(contents.toUtf8());
+    if (!f.commit()) {
+        QMessageBox box(QMessageBox::Warning, tr("Save Form"),
                         tr("Could not write file"),
-                        QMessageBox::Retry|QMessageBox::Cancel, fw);
+                        QMessageBox::Cancel, fw);
         box.setWindowModality(Qt::WindowModal);
-        box.setInformativeText(tr("It was not possible to write the entire file %1 to disk."
-                                "\nReason:%2\nWould you like to retry?")
+        box.setInformativeText(tr("It was not possible to write the file %1 to disk."
+                                "\nReason: %2")
                                 .arg(f.fileName(), f.errorString()));
-        box.setDefaultButton(QMessageBox::Retry);
-        switch (box.exec()) {
-        case QMessageBox::Retry:
-            f.resize(0);
-            break;
-        default:
-            return false;
-        }
+        box.exec();
+        return false;
     }
-    f.close();
-    removeBackup(backupFile);
     addRecentFile(saveFile);
-    m_saveDirectory = QFileInfo(f).absolutePath();
+    m_saveDirectory = QFileInfo(f.fileName()).absolutePath();
 
     fw->setDirty(false);
     fw->parentWidget()->setWindowModified(false);
@@ -967,7 +913,7 @@ void QDesignerActions::updateRecentFileActions()
     QStringList files = m_settings.recentFilesList();
     const int originalSize = files.size();
     int numRecentFiles = qMin(files.size(), int(MaxRecentFiles));
-    const QList<QAction *> recentFilesActs = m_recentFilesActions->actions();
+    const auto recentFilesActs = m_recentFilesActions->actions();
 
     for (int i = 0; i < numRecentFiles; ++i) {
         const QFileInfo fi(files[i]);
@@ -1197,7 +1143,7 @@ QString QDesignerActions::fixResourceFileBackupPath(QDesignerFormWindowInterface
 QRect QDesignerActions::fixDialogRect(const QRect &rect) const
 {
     QRect frameGeometry;
-    const QRect availableGeometry = QApplication::desktop()->availableGeometry(core()->topLevel());
+    const QRect availableGeometry = core()->topLevel()->screen()->geometry();
 
     if (workbench()->mode() == DockedMode) {
         frameGeometry = core()->topLevel()->frameGeometry();
@@ -1330,10 +1276,15 @@ void QDesignerActions::savePreviewImage()
         suggestion += QLatin1Char('.');
         suggestion += extension;
     }
+
+    QFileDialog dialog(fw, tr("Save Image"), suggestion, filter);
+    dialog.setAcceptMode(QFileDialog::AcceptSave);
+    dialog.setDefaultSuffix(extension);
+
     do {
-        const QString fileName  = getSaveFileNameWithExtension(fw, tr("Save Image"), suggestion, filter, extension);
-        if (fileName.isEmpty())
+        if (dialog.exec() != QDialog::Accepted)
             break;
+        const QString fileName = dialog.selectedFiles().constFirst();
 
         if (image.isNull()) {
             const QPixmap pixmap = createPreviewPixmap(fw);
@@ -1385,7 +1336,9 @@ void QDesignerActions::printPreviewImage()
         return;
 
     const QSizeF pixmapSize = pixmap.size();
-    m_printer->setOrientation( pixmapSize.width() > pixmapSize.height() ?  QPrinter::Landscape :  QPrinter::Portrait);
+
+    m_printer->setPageOrientation(pixmapSize.width() > pixmapSize.height() ?
+                                  QPageLayout::Landscape : QPageLayout::Portrait);
 
     // Printer parameters
     QPrintDialog dialog(m_printer, fw);

@@ -36,12 +36,13 @@
 
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qtabbar.h>
-#include <QtWidgets/qaction.h>
-#include <QtGui/qevent.h>
-#include <QtGui/qdrag.h>
 #include <QtWidgets/qmenu.h>
 #include <QtWidgets/qlabel.h>
 #include <QtWidgets/qtabwidget.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qevent.h>
+#include <QtGui/qdrag.h>
 
 #include <QtCore/qdebug.h>
 #include <QtCore/qmimedata.h>
@@ -118,9 +119,9 @@ QTabBar *QTabWidgetEventFilter::tabBar() const
 {
     // QTabWidget::tabBar() accessor is protected, grmbl...
     if (!m_cachedTabBar) {
-        const QList<QTabBar *> tabBars = m_tabWidget->findChildren<QTabBar *>();
+        const auto tabBars = m_tabWidget->findChildren<QTabBar *>();
         Q_ASSERT(tabBars.size() == 1);
-        m_cachedTabBar = tabBars.front();
+        m_cachedTabBar = tabBars.constFirst();
     }
     return m_cachedTabBar;
 
@@ -128,7 +129,7 @@ QTabBar *QTabWidgetEventFilter::tabBar() const
 
 static bool canMove(const QPoint &pressPoint, const QMouseEvent *e)
 {
-    const QPoint pt = pressPoint - e->pos();
+    const QPoint pt = pressPoint - e->position().toPoint();
     return pt.manhattanLength() > QApplication::startDragDistance();
 }
 
@@ -170,7 +171,7 @@ bool QTabWidgetEventFilter::eventFilter(QObject *o, QEvent *e)
         }
         if (mev->button() & Qt::LeftButton) {
             m_mousePressed = true;
-            m_pressPoint = mev->pos();
+            m_pressPoint = mev->position().toPoint();
 
             QTabBar *tabbar = tabBar();
             const int count = tabbar->count();
@@ -249,7 +250,7 @@ bool QTabWidgetEventFilter::eventFilter(QObject *o, QEvent *e)
         }
 
         QRect rect;
-        const int index = pageFromPosition(de->pos(), rect);
+        const int index = pageFromPosition(de->position().toPoint(), rect);
 
         if (!m_dropIndicator) {
             m_dropIndicator = new QWidget(m_tabWidget);
@@ -276,7 +277,7 @@ bool QTabWidgetEventFilter::eventFilter(QObject *o, QEvent *e)
         de->accept();
 
         QRect rect;
-        const int newIndex = pageFromPosition(de->pos(), rect);
+        const int newIndex = pageFromPosition(de->position().toPoint(), rect);
 
         qdesigner_internal::MoveTabPageCommand *cmd = new qdesigner_internal::MoveTabPageCommand(fw);
         m_tabWidget->insertTab(m_dragIndex, m_dragPage, m_dragIcon, m_dragLabel);
@@ -406,7 +407,7 @@ QTabWidgetPropertySheet::TabWidgetProperty QTabWidgetPropertySheet::tabWidgetPro
 {
     using TabWidgetPropertyHash = QHash<QString, TabWidgetProperty>;
     static TabWidgetPropertyHash tabWidgetPropertyHash;
-    if (tabWidgetPropertyHash.empty()) {
+    if (tabWidgetPropertyHash.isEmpty()) {
         tabWidgetPropertyHash.insert(QLatin1String(currentTabTextKey),      PropertyCurrentTabText);
         tabWidgetPropertyHash.insert(QLatin1String(currentTabNameKey),      PropertyCurrentTabName);
         tabWidgetPropertyHash.insert(QLatin1String(currentTabIconKey),      PropertyCurrentTabIcon);

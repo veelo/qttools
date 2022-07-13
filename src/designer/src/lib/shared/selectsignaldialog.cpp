@@ -38,12 +38,14 @@
 #include "widgetdatabase_p.h"
 
 #include <QtWidgets/qapplication.h>
-#include <QtWidgets/qdesktopwidget.h>
 #include <QtWidgets/qpushbutton.h>
+
+#include <QtGui/qscreen.h>
 #include <QtGui/qstandarditemmodel.h>
+
 #include <QtCore/qitemselectionmodel.h>
+#include <QtCore/qlist.h>
 #include <QtCore/qvariant.h>
-#include <QtCore/qvector.h>
 
 #include <algorithm>
 
@@ -53,7 +55,7 @@ namespace qdesigner_internal {
 
 enum { MethodRole = Qt::UserRole + 1 };
 
-using Methods = QVector<SelectSignalDialog::Method>;
+using Methods = QList<SelectSignalDialog::Method>;
 
 SelectSignalDialog::SelectSignalDialog(QWidget *parent)
     : QDialog(parent)
@@ -69,7 +71,7 @@ SelectSignalDialog::SelectSignalDialog(QWidget *parent)
             this, &SelectSignalDialog::currentChanged);
     connect(m_ui->signalList, &QTreeView::activated,
             this, &SelectSignalDialog::activated);
-    const QRect availableGeometry = QApplication::desktop()->availableGeometry(this);
+    const QRect availableGeometry = screen()->geometry();
     resize(availableGeometry.width() / 5, availableGeometry.height() / 2);
 }
 
@@ -162,7 +164,7 @@ void SelectSignalDialog::populate(QDesignerFormEditorInterface *core, QObject *o
     if (defaultSignal.isEmpty()) {
         selectedIndex = m_model->index(0, 0, m_model->index(0, 0, QModelIndex())); // first method
     } else {
-        const QList<QStandardItem *> items = m_model->findItems(defaultSignal, Qt::MatchExactly | Qt::MatchRecursive, 0);
+        const auto items = m_model->findItems(defaultSignal, Qt::MatchExactly | Qt::MatchRecursive, 0);
         if (!items.isEmpty())
             selectedIndex = m_model->indexFromItem(items.constFirst());
     }
@@ -240,3 +242,5 @@ void SelectSignalDialog::currentChanged(const QModelIndex &current, const QModel
 } // namespace qdesigner_internal
 
 QT_END_NAMESPACE
+
+#include "moc_selectsignaldialog_p.cpp"

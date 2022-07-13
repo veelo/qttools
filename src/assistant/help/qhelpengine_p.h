@@ -89,6 +89,7 @@ public:
     bool needsSetup = true;
     bool autoSaveFilter = true;
     bool usesFilterEngine = false;
+    bool readOnly = true;
 
 protected:
     QHelpEngineCore *q;
@@ -96,7 +97,6 @@ protected:
 private slots:
     void errorReceived(const QString &msg);
 };
-
 
 class QHelpEnginePrivate : public QHelpEngineCorePrivate
 {

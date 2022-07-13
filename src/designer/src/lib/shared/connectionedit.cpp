@@ -31,14 +31,15 @@
 
 #include <QtDesigner/abstractformwindow.h>
 
+#include <QtWidgets/qapplication.h>
+#include <QtWidgets/qmenu.h>
+
+#include <QtGui/qaction.h>
 #include <QtGui/qpainter.h>
 #include <QtGui/qevent.h>
 #include <QtGui/qfontmetrics.h>
 #include <QtGui/qpixmap.h>
-#include <QtGui/qmatrix.h>
-#include <QtWidgets/qapplication.h>
-#include <QtWidgets/qmenu.h>
-#include <QtWidgets/qaction.h>
+#include <QtGui/qtransform.h>
 
 #include <QtCore/qmap.h>
 
@@ -135,8 +136,8 @@ void AddConnectionCommand::redo()
     emit edit()->aboutToAddConnection(edit()->m_con_list.size());
     edit()->m_con_list.append(m_con);
     m_con->inserted();
-    edit()->setSelected(m_con, true);
     emit edit()->connectionAdded(m_con);
+    edit()->setSelected(m_con, true);
 }
 
 void AddConnectionCommand::undo()
@@ -222,10 +223,11 @@ void DeleteConnectionsCommand::undo()
         Q_ASSERT(!edit()->m_con_list.contains(con));
         emit edit()->aboutToAddConnection(edit()->m_con_list.size());
         edit()->m_con_list.append(con);
-        edit()->setSelected(con, true);
+        edit()->selectNone();
         con->update();
         con->inserted();
         emit edit()->connectionAdded(con);
+        edit()->setSelected(con, true);
     }
 }
 
@@ -880,7 +882,7 @@ void Connection::updatePixmap(EndPoint::Type type)
     const LineDir dir = labelDir(type);
 
     if (dir == DownDir)
-        *pm = pm->transformed(QMatrix(0.0, -1.0, 1.0, 0.0, 0.0, 0.0));
+        *pm = pm->transformed(QTransform(0.0, -1.0, 1.0, 0.0, 0.0, 0.0));
 }
 
 void Connection::checkWidgets()
@@ -1142,9 +1144,10 @@ void ConnectionEdit::mousePressEvent(QMouseEvent *e)
     // otherwise, widgets covered by the connection labels cannot be accessed
     Connection *con_under_mouse = nullptr;
     if (!m_widget_under_mouse || m_widget_under_mouse == m_bg_widget)
-        con_under_mouse = connectionAt(e->pos());
+        con_under_mouse = connectionAt(e->position().toPoint());
 
     m_start_connection_on_drag = false;
+    const bool toggleSelection = e->modifiers().testFlag(Qt::ControlModifier);
     switch (cstate) {
         case Connecting:
             if (button == Qt::RightButton)
@@ -1154,18 +1157,17 @@ void ConnectionEdit::mousePressEvent(QMouseEvent *e)
             break;
         case Editing:
             if (!m_end_point_under_mouse.isNull()) {
-                if (!(e->modifiers() & Qt::ShiftModifier)) {
-                    startDrag(m_end_point_under_mouse, e->pos());
-                }
+                if (!toggleSelection)
+                    startDrag(m_end_point_under_mouse, e->position().toPoint());
             } else if (con_under_mouse != nullptr) {
-                if (!(e->modifiers() & Qt::ShiftModifier)) {
+                if (toggleSelection) {
+                    setSelected(con_under_mouse, !selected(con_under_mouse));
+                } else {
                     selectNone();
                     setSelected(con_under_mouse, true);
-                } else {
-                    setSelected(con_under_mouse, !selected(con_under_mouse));
                 }
             } else {
-                if (!(e->modifiers() & Qt::ShiftModifier)) {
+                if (!toggleSelection) {
                     selectNone();
                     if (!m_widget_under_mouse.isNull())
                         m_start_connection_on_drag = true;
@@ -1212,7 +1214,7 @@ void ConnectionEdit::mouseReleaseEvent(QMouseEvent *e)
             if (m_widget_under_mouse.isNull())
                 abortConnection();
             else
-                endConnection(m_widget_under_mouse, e->pos());
+                endConnection(m_widget_under_mouse, e->position().toPoint());
 #if QT_CONFIG(cursor)
             setCursor(QCursor());
 #endif
@@ -1220,7 +1222,7 @@ void ConnectionEdit::mouseReleaseEvent(QMouseEvent *e)
         case Editing:
             break;
         case Dragging:
-            endDrag(e->pos());
+            endDrag(e->position().toPoint());
             break;
     }
 }
@@ -1260,24 +1262,24 @@ void ConnectionEdit::findObjectsUnderMouse(const QPoint &pos)
 
 void ConnectionEdit::mouseMoveEvent(QMouseEvent *e)
 {
-    findObjectsUnderMouse(e->pos());
+    findObjectsUnderMouse(e->position().toPoint());
     switch (state()) {
         case Connecting:
-            continueConnection(m_widget_under_mouse, e->pos());
+            continueConnection(m_widget_under_mouse, e->position().toPoint());
             break;
         case Editing:
             if ((e->buttons() & Qt::LeftButton)
                     && m_start_connection_on_drag
                     && !m_widget_under_mouse.isNull()) {
                 m_start_connection_on_drag = false;
-                startConnection(m_widget_under_mouse, e->pos());
+                startConnection(m_widget_under_mouse, e->position().toPoint());
 #if QT_CONFIG(cursor)
                 setCursor(Qt::CrossCursor);
 #endif
             }
             break;
         case Dragging:
-            continueDrag(e->pos());
+            continueDrag(e->position().toPoint());
             break;
     }
 
@@ -1370,7 +1372,7 @@ static ConnectionEdit::ConnectionSet findConnectionsOf(const ConnectionEdit::Con
 void ConnectionEdit::widgetRemoved(QWidget *widget)
 {
     // Remove all connections of that widget and its children.
-    if (m_con_list.empty())
+    if (m_con_list.isEmpty())
         return;
 
     QWidgetList child_list = widget->findChildren<QWidget*>();
@@ -1378,8 +1380,10 @@ void ConnectionEdit::widgetRemoved(QWidget *widget)
 
     const ConnectionSet remove_set = findConnectionsOf(m_con_list, child_list.constBegin(),  child_list.constEnd());
 
-    if (!remove_set.isEmpty())
-        m_undo_stack->push(new DeleteConnectionsCommand(this, remove_set.keys()));
+    if (!remove_set.isEmpty()) {
+        auto cmd = new DeleteConnectionsCommand(this, ConnectionList(remove_set.cbegin(), remove_set.cend()));
+        m_undo_stack->push(cmd);
+    }
 
     updateBackground();
 }
@@ -1387,14 +1391,16 @@ void ConnectionEdit::widgetRemoved(QWidget *widget)
 void ConnectionEdit::objectRemoved(QObject *o)
 {
     // Remove all connections of that object and its children (in case of action groups).
-    if (m_con_list.empty())
+    if (m_con_list.isEmpty())
         return;
 
     QObjectList child_list = o->children();
     child_list.prepend(o);
     const ConnectionSet remove_set = findConnectionsOf(m_con_list, child_list.constBegin(),  child_list.constEnd());
-    if (!remove_set.isEmpty())
-        m_undo_stack->push(new DeleteConnectionsCommand(this, remove_set.keys()));
+    if (!remove_set.isEmpty()) {
+        auto cmd = new DeleteConnectionsCommand(this, ConnectionList(remove_set.cbegin(), remove_set.cend()));
+        m_undo_stack->push(cmd);
+    }
 
     updateBackground();
 }
@@ -1499,7 +1505,8 @@ void ConnectionEdit::deleteSelected()
 {
     if (m_sel_con_set.isEmpty())
         return;
-    m_undo_stack->push(new DeleteConnectionsCommand(this, m_sel_con_set.keys()));
+    auto cmd = new DeleteConnectionsCommand(this, ConnectionList(m_sel_con_set.cbegin(), m_sel_con_set.cend()));
+    m_undo_stack->push(cmd);
 }
 
 void ConnectionEdit::addConnection(Connection *con)

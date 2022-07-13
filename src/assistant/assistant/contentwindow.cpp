@@ -77,6 +77,7 @@ bool ContentWindow::syncToContent(const QUrl& url)
     if (!idx.isValid())
         return false;
     m_contentWidget->setCurrentIndex(idx);
+    m_contentWidget->scrollTo(idx);
     return true;
 }
 
@@ -131,7 +132,7 @@ bool ContentWindow::eventFilter(QObject *o, QEvent *e)
         QItemSelectionModel *sm = m_contentWidget->selectionModel();
         if (sm->isSelected(index)) {
             if ((button == Qt::LeftButton && (me->modifiers() & Qt::ControlModifier))
-                || (button == Qt::MidButton)) {
+                || (button == Qt::MiddleButton)) {
                 QHelpContentModel *contentModel =
                     qobject_cast<QHelpContentModel*>(m_contentWidget->model());
                 if (contentModel) {

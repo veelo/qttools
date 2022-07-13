@@ -170,7 +170,7 @@ void QtGradientStopsWidgetPrivate::setupMove(QtGradientStop *stop, int x)
     int viewportX = qRound(toViewport(stop->position()));
     m_moveOffset = x - viewportX;
 
-    const QList<QtGradientStop *> stops = m_stops;
+    const auto stops = m_stops;
     m_stops.clear();
     for (QtGradientStop *s : stops) {
         if (m_model->isSelected(s) || s == stop) {
@@ -450,7 +450,7 @@ void QtGradientStopsWidget::setGradientStopsModel(QtGradientStopsModel *model)
         for (auto it = stopsMap.cbegin(), end = stopsMap.cend(); it != end; ++it)
             d_ptr->slotStopAdded(it.value());
 
-        const QList<QtGradientStop *> selected = d_ptr->m_model->selectedStops();
+        const auto selected = d_ptr->m_model->selectedStops();
         for (QtGradientStop *stop : selected)
             d_ptr->slotStopSelected(stop, true);
 
@@ -471,8 +471,8 @@ void QtGradientStopsWidget::mousePressEvent(QMouseEvent *e)
 
     d_ptr->m_moveStops.clear();
     d_ptr->m_moveOriginal.clear();
-    d_ptr->m_clickPos = e->pos();
-    QtGradientStop *stop = d_ptr->stopAt(e->pos());
+    d_ptr->m_clickPos = e->position().toPoint();
+    QtGradientStop *stop = d_ptr->stopAt(e->position().toPoint());
     if (stop) {
         if (e->modifiers() & Qt::ControlModifier) {
             d_ptr->m_model->selectStop(stop, !d_ptr->m_model->isSelected(stop));
@@ -498,7 +498,7 @@ void QtGradientStopsWidget::mousePressEvent(QMouseEvent *e)
                 d_ptr->m_model->selectStop(stop, true);
             }
         }
-        d_ptr->setupMove(stop, e->pos().x());
+        d_ptr->setupMove(stop, e->position().toPoint().x());
     } else {
         d_ptr->m_model->clearSelection();
         d_ptr->m_rubber->setGeometry(QRect(d_ptr->m_clickPos, QSize()));
@@ -561,7 +561,7 @@ void QtGradientStopsWidget::mouseMoveEvent(QMouseEvent *e)
 
         PositionStopMap newPositions;
 
-        int viewportX = e->pos().x() - d_ptr->m_moveOffset;
+        int viewportX = e->position().toPoint().x() - d_ptr->m_moveOffset;
 
         if (viewportX > viewport()->size().width())
             viewportX = viewport()->size().width();
@@ -619,20 +619,20 @@ void QtGradientStopsWidget::mouseMoveEvent(QMouseEvent *e)
         }
 
     } else {
-        QRect r(QRect(d_ptr->m_clickPos, e->pos()).normalized());
+        QRect r(QRect(d_ptr->m_clickPos, e->position().toPoint()).normalized());
         r.translate(1, 0);
         d_ptr->m_rubber->setGeometry(r);
         //d_ptr->m_model->clearSelection();
 
         int xv1 = d_ptr->m_clickPos.x();
-        int xv2 = e->pos().x();
+        int xv2 = e->position().toPoint().x();
         if (xv1 > xv2) {
             int temp = xv1;
             xv1 = xv2;
             xv2 = temp;
         }
         int yv1 = d_ptr->m_clickPos.y();
-        int yv2 = e->pos().y();
+        int yv2 = e->position().toPoint().y();
         if (yv1 > yv2) {
             int temp = yv1;
             yv1 = yv2;
@@ -652,8 +652,8 @@ void QtGradientStopsWidget::mouseMoveEvent(QMouseEvent *e)
             p2 = QPoint(xv2, qRound(d_ptr->m_handleSize / 2));
         }
 
-        QList<QtGradientStop *> beginList = d_ptr->stopsAt(p1);
-        QList<QtGradientStop *> endList = d_ptr->stopsAt(p2);
+        const auto beginList = d_ptr->stopsAt(p1);
+        const auto endList = d_ptr->stopsAt(p2);
 
         double x1 = d_ptr->fromViewport(xv1);
         double x2 = d_ptr->fromViewport(xv2);
@@ -676,7 +676,7 @@ void QtGradientStopsWidget::mouseDoubleClickEvent(QMouseEvent *e)
     if (e->button() != Qt::LeftButton)
         return;
 
-    if (d_ptr->m_clickPos != e->pos()) {
+    if (d_ptr->m_clickPos != e->position().toPoint()) {
         mousePressEvent(e);
         return;
     }
@@ -684,7 +684,7 @@ void QtGradientStopsWidget::mouseDoubleClickEvent(QMouseEvent *e)
     d_ptr->m_moveStops.clear();
     d_ptr->m_moveOriginal.clear();
 
-    QtGradientStop *stop = d_ptr->newStop(e->pos());
+    QtGradientStop *stop = d_ptr->newStop(e->position().toPoint());
 
     if (!stop)
         return;
@@ -692,7 +692,7 @@ void QtGradientStopsWidget::mouseDoubleClickEvent(QMouseEvent *e)
     d_ptr->m_model->clearSelection();
     d_ptr->m_model->selectStop(stop, true);
 
-    d_ptr->setupMove(stop, e->pos().x());
+    d_ptr->setupMove(stop, e->position().toPoint().x());
 
     viewport()->update();
 }
@@ -960,7 +960,7 @@ void QtGradientStopsWidget::contextMenuEvent(QContextMenuEvent *e)
 
 void QtGradientStopsWidget::wheelEvent(QWheelEvent *e)
 {
-    int numDegrees = e->delta() / 8;
+    int numDegrees = e->angleDelta().y() / 8;
     int numSteps = numDegrees / 15;
 
     int shift = numSteps;
@@ -1006,13 +1006,13 @@ void QtGradientStopsWidget::dragMoveEvent(QDragMoveEvent *event)
 {
     QRectF rect = viewport()->rect();
     rect.adjust(0, d_ptr->m_handleSize, 0, 0);
-    double x = d_ptr->fromViewport(event->pos().x());
-    QtGradientStop *dragStop = d_ptr->stopAt(event->pos());
+    double x = d_ptr->fromViewport(event->position().toPoint().x());
+    QtGradientStop *dragStop = d_ptr->stopAt(event->position().toPoint());
     if (dragStop) {
         event->accept();
         d_ptr->removeClonedStop();
         d_ptr->changeStop(dragStop->position());
-    } else if (rect.contains(event->pos())) {
+    } else if (rect.contains(event->position().toPoint())) {
         event->accept();
         if (d_ptr->m_model->at(x)) {
             d_ptr->removeClonedStop();

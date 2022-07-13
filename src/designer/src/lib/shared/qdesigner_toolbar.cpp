@@ -41,14 +41,15 @@
 #include <QtDesigner/qextensionmanager.h>
 #include <QtDesigner/abstractwidgetfactory.h>
 
-#include <QtWidgets/qaction.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qtoolbutton.h>
 #include <QtWidgets/qtoolbar.h>
 #include <QtWidgets/qmenu.h>
+
+#include <QtGui/qaction.h>
 #include <QtGui/qevent.h>
 #include <QtGui/qdrag.h>
-#include <QtWidgets/qapplication.h>
+
 #include <QtCore/qdebug.h>
 
 Q_DECLARE_METATYPE(QAction*)
@@ -124,7 +125,7 @@ ActionList ToolBarEventFilter::contextMenuActions(const QPoint &globalPos)
 {
     ActionList rc;
     const int index = actionIndexAt(m_toolBar, m_toolBar->mapFromGlobal(globalPos), m_toolBar->orientation());
-    const ActionList actions = m_toolBar->actions();
+    const auto actions = m_toolBar->actions();
     QAction *action = index != -1 ?actions.at(index) : 0;
     QVariant itemData;
 
@@ -138,7 +139,7 @@ ActionList ToolBarEventFilter::contextMenuActions(const QPoint &globalPos)
     }
 
     // Append separator
-    if (actions.empty() || !actions.back()->isSeparator()) {
+    if (actions.isEmpty() || !actions.constLast()->isSeparator()) {
         QAction *newSeperatorAct = new QAction(tr("Append Separator"), nullptr);
         itemData.setValue(static_cast<QAction*>(nullptr));
         newSeperatorAct->setData(itemData);
@@ -262,7 +263,7 @@ void ToolBarEventFilter::hideDragIndicator()
 
 bool ToolBarEventFilter::handleMousePressEvent(QMouseEvent *event)
 {
-    if (event->button() != Qt::LeftButton || withinHandleArea(m_toolBar, event->pos()))
+    if (event->button() != Qt::LeftButton || withinHandleArea(m_toolBar, event->position().toPoint()))
         return false;
 
     if (QDesignerFormWindowInterface *fw = formWindow()) {
@@ -275,14 +276,14 @@ bool ToolBarEventFilter::handleMousePressEvent(QMouseEvent *event)
         }
         core->propertyEditor()->setObject(m_toolBar);
     }
-    m_startPosition = m_toolBar->mapFromGlobal(event->globalPos());
+    m_startPosition = m_toolBar->mapFromGlobal(event->globalPosition().toPoint());
     event->accept();
     return true;
 }
 
 bool ToolBarEventFilter::handleMouseReleaseEvent(QMouseEvent *event)
 {
-    if (event->button() != Qt::LeftButton || m_startPosition.isNull() || withinHandleArea(m_toolBar, event->pos()))
+    if (event->button() != Qt::LeftButton || m_startPosition.isNull() || withinHandleArea(m_toolBar, event->position().toPoint()))
         return false;
 
     // Accept the event, otherwise, form window selection will trigger
@@ -293,10 +294,10 @@ bool ToolBarEventFilter::handleMouseReleaseEvent(QMouseEvent *event)
 
 bool ToolBarEventFilter::handleMouseMoveEvent(QMouseEvent *event)
 {
-    if (m_startPosition.isNull() || withinHandleArea(m_toolBar, event->pos()))
+    if (m_startPosition.isNull() || withinHandleArea(m_toolBar, event->position().toPoint()))
         return false;
 
-    const QPoint pos = m_toolBar->mapFromGlobal(event->globalPos());
+    const QPoint pos = m_toolBar->mapFromGlobal(event->globalPosition().toPoint());
     if ((pos - m_startPosition).manhattanLength() > qApp->startDragDistance()) {
         startDrag(m_startPosition, event->modifiers());
         m_startPosition = QPoint();
@@ -326,7 +327,7 @@ bool ToolBarEventFilter::handleDragEnterMoveEvent(QDragMoveEvent *event)
     }
 
     d->accept(event);
-    adjustDragIndicator(event->pos());
+    adjustDragIndicator(event->position().toPoint());
     return true;
 }
 
@@ -359,7 +360,7 @@ bool ToolBarEventFilter::handleDropEvent(QDropEvent *event)
 
     // Try to find action to 'insert before'. Click on action or in free area, else ignore.
     QAction *beforeAction = nullptr;
-    const QPoint pos = event->pos();
+    const QPoint pos = event->position().toPoint();
     const int index = actionIndexAt(m_toolBar, pos, m_toolBar->orientation());
     if (index != -1) {
         beforeAction = actions.at(index);
@@ -448,7 +449,8 @@ QRect ToolBarEventFilter::freeArea(const QToolBar *tb)
 {
     QRect rc = QRect(QPoint(0, 0), tb->size());
     const ActionList actionList = tb->actions();
-    QRect exclusionRectangle = actionList.empty() ? handleArea(tb) : tb->actionGeometry(actionList.back());
+    QRect exclusionRectangle = actionList.isEmpty()
+        ? handleArea(tb) : tb->actionGeometry(actionList.constLast());
     switch (tb->orientation()) {
     case Qt::Horizontal:
         switch (tb->layoutDirection()) {

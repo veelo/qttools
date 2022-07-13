@@ -50,8 +50,7 @@
 #include <QtWidgets/qwidget.h>
 #include <QtGui/qpixmap.h>
 #include <QtGui/qpolygon.h>
-
-#include <QtWidgets/qundostack.h>
+#include <QtGui/qundostack.h>
 
 QT_BEGIN_NAMESPACE
 

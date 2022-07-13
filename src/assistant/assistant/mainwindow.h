@@ -46,10 +46,12 @@ class ContentWindow;
 class IndexWindow;
 class QtDocInstaller;
 class SearchWidget;
+struct QHelpLink;
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+    Q_MOC_INCLUDE(<QtHelp/qhelplink.h>)
 
 public:
     explicit MainWindow(CmdLineParser *cmdLine, QWidget *parent = nullptr);
@@ -88,7 +90,7 @@ private slots:
     void showNewAddress();
     void showAboutDialog();
     void showNewAddress(const QUrl &url);
-    void showTopicChooser(const QMap<QString, QUrl> &links, const QString &keyword);
+    void showTopicChooser(const QList<QHelpLink> &documents, const QString &keyword);
     void updateApplicationFont();
     void filterDocumentation(int filterIndex);
     void setupFilterCombo();

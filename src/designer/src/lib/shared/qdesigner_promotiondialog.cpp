@@ -39,22 +39,24 @@
 #include <QtDesigner/abstractintegration.h>
 #include <abstractdialoggui_p.h>
 
-#include <QtCore/qtimer.h>
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qformlayout.h>
 #include <QtWidgets/qdialogbuttonbox.h>
 #include <QtWidgets/qtreeview.h>
 #include <QtWidgets/qheaderview.h>
 #include <QtWidgets/qpushbutton.h>
-#include <QtCore/qitemselectionmodel.h>
 #include <QtWidgets/qcombobox.h>
 #include <QtWidgets/qlineedit.h>
 #include <QtWidgets/qcheckbox.h>
-#include <QtGui/qvalidator.h>
 #include <QtWidgets/qlabel.h>
 #include <QtWidgets/qlayoutitem.h>
 #include <QtWidgets/qmenu.h>
-#include <QtWidgets/qaction.h>
+
+#include <QtGui/qaction.h>
+#include <QtGui/qvalidator.h>
+
+#include <QtCore/qitemselectionmodel.h>
+#include <QtCore/qtimer.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -290,7 +292,7 @@ namespace qdesigner_internal {
     const QStringList &QDesignerPromotionDialog::baseClassNames(const QDesignerPromotionInterface *promotion) {
         using WidgetDataBaseItemList = QList<QDesignerWidgetDataBaseItemInterface *>;
         static QStringList rc;
-        if (rc.empty()) {
+        if (rc.isEmpty()) {
             // Convert the item list into a string list.
             const WidgetDataBaseItemList dbItems =  promotion->promotionBaseClasses();
             const WidgetDataBaseItemList::const_iterator cend =  dbItems.constEnd();
@@ -351,7 +353,7 @@ namespace qdesigner_internal {
     QDesignerWidgetDataBaseItemInterface *QDesignerPromotionDialog::databaseItemAt(const QItemSelection &selected, unsigned &flags) const {
         flags = 0;
         const QModelIndexList indexes = selected.indexes();
-        if (indexes.empty())
+        if (indexes.isEmpty())
             return nullptr;
         const PromotionModel::ModelData data = m_model->modelData(indexes.constFirst());
         QDesignerWidgetDataBaseItemInterface *dbItem = data.promotedItem;
